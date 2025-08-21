@@ -38,13 +38,15 @@
         let gameOver = false, gameStarted = false, frameCount = 0;
         let nextObstacleFrame, nextCreatureFrame;
 
-        // 火球資源
+        // 資源管理
         let maxFireballs = 10, currentFireballs = 10;
         let fireballRegenRate = 120, fireballRegenCounter = 0;
+        let maxHealth = 3, dinoHealth = 3;
+        let isInvincible = false, invincibilityDuration = 120, invincibilityCounter = 0;
 
         // 日夜循環
         let timeInCycle = 0, transitionTime = 0;
-        const dayDuration = 60 * 60; // 60秒
+        const dayDuration = 15 * 60; // 15秒
         const nightDuration = 30 * 60; // 30秒
         const transitionDuration = 60; // 1秒過渡
         let isDay = true;
@@ -56,56 +58,37 @@
         function setNextCreatureFrame() { nextCreatureFrame = frameCount + Math.floor(Math.random() * 150 + 120); }
 
         // --- 類別定義 ---
-        class ScorePopup { constructor(x, y, text) { this.x=x; this.y=y; this.text=text; this.life=60; this.opacity=1; } update() { this.y-=0.5; this.life--; this.opacity=this.life/60; } draw() { ctx.save(); ctx.globalAlpha=this.opacity; ctx.fillStyle='#28a745'; ctx.font='16px Arial'; ctx.fillText(this.text,this.x,this.y); ctx.restore(); } }
-        class Fireball { constructor(x, y) { this.x=x; this.y=y; this.width=20; this.height=10; this.speed=10; } draw() { ctx.fillStyle='#ff4500'; ctx.fillRect(this.x,this.y,this.width,this.height); } update() { this.x+=this.speed; this.draw(); } }
-        class Dino { constructor(x,y,w,h) { this.x=x; this.y=y; this.w=w; this.h=h; this.dy=0; this.isJumping=false; this.jumpPower=-15; this.groundY=canvas.height-10; } draw() { ctx.drawImage(dinoImage,this.x,this.y,this.w,this.h); } update() { if(this.isJumping){this.dy+=gravity;this.y+=this.dy;} if(this.y+this.h>this.groundY){this.y=this.groundY-this.h;this.dy=0;this.isJumping=false;} this.draw(); } jump() { if(!this.isJumping){this.isJumping=true;this.dy=this.jumpPower;} } shoot() { if(currentFireballs>0){fireballs.push(new Fireball(this.x+this.w,this.y+this.h/2-5));currentFireballs--;} } }
-        class Obstacle { constructor(x,y,w,h) { this.x=x; this.y=y; this.w=w; this.h=h; } draw() { ctx.fillStyle='#d9534f'; ctx.fillRect(this.x,this.y,this.w,this.h); } update() { this.x-=gameSpeed; this.draw(); } }
-        class Creature { constructor(x,y,w,h) { this.x=x; this.y=y; this.w=w; this.h=h; this.dx=-gameSpeed*0.7; this.dy=0; this.isJumping=false; this.jumpPower=-12; this.groundY=canvas.height-10; } draw() { ctx.fillStyle='#8a2be2'; ctx.fillRect(this.x,this.y,this.w,this.h); } update() { this.x+=this.dx; if(this.isJumping){this.dy+=gravity;this.y+=this.dy;} if(this.y+this.h>this.groundY){this.y=this.groundY-this.h;this.dy=0;this.isJumping=false;} for(const o of obstacles){if(o.x-this.x<80&&o.x-this.x>0&&!this.isJumping){this.jump();break;}} this.draw(); } jump() { if(!this.isJumping){this.isJumping=true;this.dy=this.jumpPower;} } }
+        class ScorePopup{constructor(x,y,t){this.x=x;this.y=y;this.text=t;this.life=60;this.opacity=1;}update(){this.y-=0.5;this.life--;this.opacity=this.life/60;}draw(){ctx.save();ctx.globalAlpha=this.opacity;ctx.fillStyle='#28a745';ctx.font='16px Arial';ctx.fillText(this.text,this.x,this.y);ctx.restore();}}
+        class Fireball{constructor(x,y){this.x=x;this.y=y;this.width=20;this.height=10;this.speed=10;}draw(){ctx.fillStyle='#ff4500';ctx.fillRect(this.x,this.y,this.width,this.height);}update(){this.x+=this.speed;this.draw();}}
+        class Dino{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.dy=0;this.isJumping=false;this.jumpPower=-15;this.groundY=canvas.height-10;}draw(){if(isInvincible){if(invincibilityCounter%10<5){ctx.drawImage(dinoImage,this.x,this.y,this.w,this.h);}}else{ctx.drawImage(dinoImage,this.x,this.y,this.w,this.h);}}update(){if(this.isJumping){this.dy+=gravity;this.y+=this.dy;}if(this.y+this.h>this.groundY){this.y=this.groundY-this.h;this.dy=0;this.isJumping=false;}this.draw();}jump(){if(!this.isJumping){this.isJumping=true;this.dy=this.jumpPower;}}shoot(){if(currentFireballs>0){fireballs.push(new Fireball(this.x+this.w,this.y+this.h/2-5));currentFireballs--;}}}
+        class Obstacle{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;}draw(){ctx.fillStyle='#d9534f';ctx.fillRect(this.x,this.y,this.w,this.h);}update(){this.x-=gameSpeed;this.draw();}}
+        class Creature{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.dx=-gameSpeed*0.7;this.dy=0;this.isJumping=false;this.jumpPower=-12;this.groundY=canvas.height-10;}draw(){ctx.fillStyle='#8a2be2';ctx.fillRect(this.x,this.y,this.w,this.h);}update(){this.x+=this.dx;if(this.isJumping){this.dy+=gravity;this.y+=this.dy;}if(this.y+this.h>this.groundY){this.y=this.groundY-this.h;this.dy=0;this.isJumping=false;}for(const o of obstacles){if(o.x-this.x<80&&o.x-this.x>0&&!this.isJumping){this.jump();break;}}this.draw();}jump(){if(!this.isJumping){this.isJumping=true;this.dy=this.jumpPower;}}}
 
         // --- 遊戲邏輯處理 ---
-        function lerpColor(a, b, amount) { const ar=a>>16, ag=a>>8&0xff, ab=a&0xff, br=b>>16, bg=b>>8&0xff, bb=b&0xff, rr=ar+amount*(br-ar), rg=ag+amount*(bg-ag), rb=ab+amount*(bb-ab); return (rr<<16|rg<<8|rb|0).toString(16).padStart(6,'0').replace(/^/,'#'); }
-        function handleDayNightCycle() {
-            timeInCycle++;
-            let cycleDuration = isDay ? dayDuration : nightDuration;
-            if (timeInCycle > cycleDuration) {
-                if (transitionTime < transitionDuration) {
-                    transitionTime++;
-                    const startColors = isDay ? dayColors : nightColors;
-                    const endColors = isDay ? nightColors : dayColors;
-                    const factor = transitionTime / transitionDuration;
-                    currentColors.bg = lerpColor(parseInt(startColors.bg.slice(1),16), parseInt(endColors.bg.slice(1),16), factor);
-                    currentColors.fg = lerpColor(parseInt(startColors.fg.slice(1),16), parseInt(endColors.fg.slice(1),16), factor);
-                    currentColors.ground = lerpColor(parseInt(startColors.ground.slice(1),16), parseInt(endColors.ground.slice(1),16), factor);
-                } else {
-                    isDay = !isDay;
-                    timeInCycle = 0;
-                    transitionTime = 0;
-                }
-            }
-            document.body.style.backgroundColor = currentColors.bg;
-            document.querySelector('h1').style.color = currentColors.fg;
-            document.querySelector('p').style.color = currentColors.fg;
-            canvas.style.borderColor = currentColors.ground;
-        }
-
-        function handleFireballs() { for(let i=fireballs.length-1;i>=0;i--){fireballs[i].update();for(let j=creatures.length-1;j>=0;j--){if(fireballs[i]&&fireballs[i].x<creatures[j].x+creatures[j].w&&fireballs[i].x+fireballs[i].width>creatures[j].x&&fireballs[i].y<creatures[j].y+creatures[j].h&&fireballs[i].y+fireballs[i].height>creatures[j].y){const c=creatures[j];scorePopups.push(new ScorePopup(c.x,c.y,'+100'));creatures.splice(j,1);fireballs.splice(i,1);score+=100;break;}} if(fireballs[i]&&fireballs[i].x>canvas.width){fireballs.splice(i,1);}} }
-        function handleScorePopups() { for(let i=scorePopups.length-1;i>=0;i--){scorePopups[i].update();scorePopups[i].draw();if(scorePopups[i].life<=0){scorePopups.splice(i,1);}} }
-        function handleFireballRegen() { if(currentFireballs<maxFireballs){fireballRegenCounter++;if(fireballRegenCounter>=fireballRegenRate){currentFireballs++;fireballRegenCounter=0;}} }
-        function handleObstacles() { if(frameCount===nextObstacleFrame){createObstacle();setNextObstacleFrame();} for(let i=obstacles.length-1;i>=0;i--){obstacles[i].update();if(dino.x<obstacles[i].x+obstacles[i].w&&dino.x+dino.w>obstacles[i].x&&dino.y<obstacles[i].y+obstacles[i].h&&dino.y+dino.h>obstacles[i].y){gameOver=true;} if(obstacles[i].x+obstacles[i].w<0){obstacles.splice(i,1);}} }
-        function handleCreatures() { if(frameCount===nextCreatureFrame){createCreature();setNextCreatureFrame();} for(let i=creatures.length-1;i>=0;i--){creatures[i].update();if(dino.x<creatures[i].x+creatures[i].w&&dino.x+dino.w>creatures[i].x&&dino.y<creatures[i].y+creatures[i].h&&dino.y+dino.h>creatures[i].y){gameOver=true;} if(creatures[i].x+creatures[i].w<0){creatures.splice(i,1);}} }
-        function createObstacle() { const h=Math.random()*30+20;obstacles.push(new Obstacle(canvas.width,canvas.height-h-10,20,h)); }
-        function createCreature() { const s=30;creatures.push(new Creature(canvas.width,canvas.height-s-10,s,s)); }
+        function handleDamage(){dinoHealth--;isInvincible=true;invincibilityCounter=0;if(dinoHealth<=0){gameOver=true;}}
+        function lerpColor(a,b,am){const ar=a>>16,ag=a>>8&0xff,ab=a&0xff,br=b>>16,bg=b>>8&0xff,bb=b&0xff,rr=ar+am*(br-ar),rg=ag+am*(bg-ag),rb=ab+am*(bb-ab);return(rr<<16|rg<<8|rb|0).toString(16).padStart(6,'0').replace(/^/,'#');}
+        function handleDayNightCycle(){timeInCycle++;let dur=isDay?dayDuration:nightDuration;if(timeInCycle>dur){if(transitionTime<transitionDuration){transitionTime++;const sC=isDay?dayColors:nightColors,eC=isDay?nightColors:dayColors,f=transitionTime/transitionDuration;currentColors.bg=lerpColor(parseInt(sC.bg.slice(1),16),parseInt(eC.bg.slice(1),16),f);currentColors.fg=lerpColor(parseInt(sC.fg.slice(1),16),parseInt(eC.fg.slice(1),16),f);currentColors.ground=lerpColor(parseInt(sC.ground.slice(1),16),parseInt(eC.ground.slice(1),16),f);}else{isDay=!isDay;timeInCycle=0;transitionTime=0;}}document.body.style.backgroundColor=currentColors.bg;document.querySelector('h1').style.color=currentColors.fg;document.querySelector('p').style.color=currentColors.fg;canvas.style.borderColor=currentColors.ground;}
+        function handleInvincibility(){if(isInvincible){invincibilityCounter++;if(invincibilityCounter>=invincibilityDuration){isInvincible=false;invincibilityCounter=0;}}}
+        function handleFireballs(){for(let i=fireballs.length-1;i>=0;i--){fireballs[i].update();for(let j=creatures.length-1;j>=0;j--){if(fireballs[i]&&fireballs[i].x<creatures[j].x+creatures[j].w&&fireballs[i].x+fireballs[i].width>creatures[j].x&&fireballs[i].y<creatures[j].y+creatures[j].h&&fireballs[i].y+fireballs[i].height>creatures[j].y){const c=creatures[j];scorePopups.push(new ScorePopup(c.x,c.y,'+100'));creatures.splice(j,1);fireballs.splice(i,1);score+=100;break;}}if(fireballs[i]&&fireballs[i].x>canvas.width){fireballs.splice(i,1);}}}
+        function handleScorePopups(){for(let i=scorePopups.length-1;i>=0;i--){scorePopups[i].update();scorePopups[i].draw();if(scorePopups[i].life<=0){scorePopups.splice(i,1);}}}
+        function handleFireballRegen(){if(currentFireballs<maxFireballs){fireballRegenCounter++;if(fireballRegenCounter>=fireballRegenRate){currentFireballs++;fireballRegenCounter=0;}}}
+        function handleObstacles(){if(frameCount===nextObstacleFrame){createObstacle();setNextObstacleFrame();}for(let i=obstacles.length-1;i>=0;i--){obstacles[i].update();if(dino.x<obstacles[i].x+obstacles[i].w&&dino.x+dino.w>obstacles[i].x&&dino.y<obstacles[i].y+obstacles[i].h&&dino.y+dino.h>obstacles[i].y&&!isInvincible){handleDamage();obstacles.splice(i,1);}if(obstacles[i]&&obstacles[i].x+obstacles[i].w<0){obstacles.splice(i,1);}}}
+        function handleCreatures(){if(frameCount===nextCreatureFrame){createCreature();setNextCreatureFrame();}for(let i=creatures.length-1;i>=0;i--){creatures[i].update();if(dino.x<creatures[i].x+creatures[i].w&&dino.x+dino.w>creatures[i].x&&dino.y<creatures[i].y+creatures[i].h&&dino.y+dino.h>creatures[i].y&&!isInvincible){handleDamage();creatures.splice(i,1);}if(creatures[i]&&creatures[i].x+creatures[i].w<0){creatures.splice(i,1);}}}
+        function createObstacle(){const h=Math.random()*30+20;obstacles.push(new Obstacle(canvas.width,canvas.height-h-10,20,h));}
+        function createCreature(){const s=30;creatures.push(new Creature(canvas.width,canvas.height-s-10,s,s));}
 
         // --- 繪圖與主迴圈 ---
-        function drawInfo() { ctx.fillStyle=currentColors.fg; ctx.font='20px Arial'; ctx.fillText(`分數: ${score}`,10,30); }
-        function drawFireballBar() { const bW=150,bH=15,x=10,y=40; ctx.strokeStyle=currentColors.ground; ctx.strokeRect(x,y,bW,bH); const fW=(currentFireballs/maxFireballs)*bW; ctx.fillStyle='#ff8c00'; ctx.fillRect(x,y,fW,bH); ctx.fillStyle=currentColors.bg; ctx.font='12px Arial'; ctx.textAlign='center'; ctx.fillText(`${currentFireballs}/${maxFireballs}`,x+bW/2,y+bH-3); ctx.textAlign='left'; }
-        function drawGround() { ctx.beginPath(); ctx.moveTo(0,canvas.height-10); ctx.lineTo(canvas.width,canvas.height-10); ctx.strokeStyle=currentColors.ground; ctx.lineWidth=2; ctx.stroke(); }
+        function drawHealth(){ctx.fillStyle='#d9534f';ctx.font='24px Arial';let hStr='';for(let i=0;i<dinoHealth;i++){hStr+='♥';}ctx.textAlign='right';ctx.fillText(hStr,canvas.width-10,30);ctx.textAlign='left';}
+        function drawInfo(){ctx.fillStyle=currentColors.fg;ctx.font='20px Arial';ctx.fillText(`分數: ${score}`,10,30);}
+        function drawFireballBar(){const bW=150,bH=15,x=10,y=40;ctx.strokeStyle=currentColors.ground;ctx.strokeRect(x,y,bW,bH);const fW=(currentFireballs/maxFireballs)*bW;ctx.fillStyle='#ff8c00';ctx.fillRect(x,y,fW,bH);ctx.fillStyle=currentColors.bg;ctx.font='12px Arial';ctx.textAlign='center';ctx.fillText(`${currentFireballs}/${maxFireballs}`,x+bW/2,y+bH-3);ctx.textAlign='left';}
+        function drawGround(){ctx.beginPath();ctx.moveTo(0,canvas.height-10);ctx.lineTo(canvas.width,canvas.height-10);ctx.strokeStyle=currentColors.ground;ctx.lineWidth=2;ctx.stroke();}
 
-        function animate() {
+        function animate(){
             if(gameOver){showGameOver();window.addEventListener('keydown',resetOnGameOver,{once:true});return;}
             requestAnimationFrame(animate);
             ctx.clearRect(0,0,canvas.width,canvas.height);
             handleDayNightCycle();
+            handleInvincibility();
             drawGround();
             dino.update();
             handleFireballs();
@@ -115,25 +98,27 @@
             handleScorePopups();
             drawInfo();
             drawFireballBar();
+            drawHealth();
             score++;
             frameCount++;
             if(frameCount%200===0){gameSpeed+=0.2;}
         }
 
         // --- 遊戲狀態 ---
-        function resetGame() {
+        function resetGame(){
             dino=new Dino(50,canvas.height-50,40,40);
             obstacles=[];fireballs=[];creatures=[];scorePopups=[];
             score=0;gameSpeed=5;gameOver=false;gameStarted=true;frameCount=0;
             currentFireballs=maxFireballs;fireballRegenCounter=0;
+            dinoHealth=maxHealth;isInvincible=false;invincibilityCounter=0;
             isDay=true;timeInCycle=0;transitionTime=0;currentColors={...dayColors};
             setNextObstacleFrame();
             setNextCreatureFrame();
             animate();
         }
 
-        function showGameOver() { ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.fillStyle='white'; ctx.font='40px Arial'; ctx.textAlign='center'; ctx.fillText('遊戲結束',canvas.width/2,canvas.height/2-20); ctx.font='20px Arial'; ctx.fillText(`你的分數: ${score}`,canvas.width/2,canvas.height/2+20); ctx.fillText('按任意鍵重新開始',canvas.width/2,canvas.height/2+60); ctx.textAlign='left'; }
-        function showStartScreen() { ctx.clearRect(0,0,canvas.width,canvas.height); drawGround(); dino.draw(); drawFireballBar(); ctx.fillStyle=currentColors.fg; ctx.font='30px Arial'; ctx.textAlign='center'; ctx.fillText('準備好了嗎?',canvas.width/2,canvas.height/2-20); ctx.textAlign='left'; }
+        function showGameOver(){ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.fillStyle='white';ctx.font='40px Arial';ctx.textAlign='center';ctx.fillText('遊戲結束',canvas.width/2,canvas.height/2-20);ctx.font='20px Arial';ctx.fillText(`你的分數: ${score}`,canvas.width/2,canvas.height/2+20);ctx.fillText('按任意鍵重新開始',canvas.width/2,canvas.height/2+60);ctx.textAlign='left';}
+        function showStartScreen(){ctx.clearRect(0,0,canvas.width,canvas.height);drawGround();dino.draw();drawFireballBar();drawHealth();ctx.fillStyle=currentColors.fg;ctx.font='30px Arial';ctx.textAlign='center';ctx.fillText('準備好了嗎?',canvas.width/2,canvas.height/2-20);ctx.textAlign='left';}
         
         // --- 事件監聽 ---
         function handleControls(e){const k=e.code;if(k==='Space'||k==='ArrowUp'){e.preventDefault();if(!gameStarted)resetGame();else if(!gameOver)dino.jump();}else if(k==='KeyX'){if(gameStarted&&!gameOver)dino.shoot();}}
