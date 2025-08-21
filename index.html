@@ -53,6 +53,7 @@
         let gameOver = false, gameStarted = false, frameCount = 0;
         let nextObstacleFrame, nextCreatureFrame, nextFlyingEnemySpawn = 0;
         const keyState = {};
+        let xPressStartTime = 0; // 新增變數，記錄X鍵按下的時間
 
         // 資源管理
         let maxFireballs = 10, currentFireballs = 10, fireballRegenRate = 120, fireballRegenCounter = 0;
@@ -91,7 +92,7 @@
             }
             jump(){if(!this.isJumping){this.isJumping=true;this.dy=this.jumpPower;}}
             cutJump() { if (this.dy < 0) { this.dy = 0; } }
-            shoot(){if(currentFireballs>0&&!isCharging){fireballs.push(new Fireball(this.x+this.w,this.y+this.h/2-5));currentFireballs--;}}
+            shoot(){if(currentFireballs>0){fireballs.push(new Fireball(this.x+this.w,this.y+this.h/2-5));currentFireballs--;}}
             fireUltimate(){if(chargeTime>=minChargeTime){ultimateFireball=new UltimateFireball(this.x+this.w,0);currentFireballs=0;}}
         }
         class Obstacle{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;}draw(){ctx.fillStyle='#d9534f';ctx.fillRect(this.x,this.y,this.w,this.h);}update(){this.x-=gameSpeed;this.draw();}}
@@ -169,6 +170,13 @@
                 return;
             }
             requestAnimationFrame(animate);
+            if (keyState['KeyX'] && currentFireballs === maxFireballs && !isCharging && xPressStartTime > 0) {
+                // 如果X鍵被按住，火球已滿，尚未蓄力，且按下時間已記錄
+                if (frameCount - xPressStartTime >= minChargeTime) {
+                    isCharging = true; // 開始蓄力
+                    chargeTime = frameCount - xPressStartTime; // 初始化蓄力時間
+                }
+            }
             if(isCharging){
                 chargeTime++;
                 console.log("Charging: chargeTime =", chargeTime);
@@ -226,8 +234,12 @@
             } else if (k === 'KeyX') {
                 if (gameStarted && !gameOver) {
                     if (currentFireballs === maxFireballs) {
-                        isCharging = true;
+                        // 如果火球已滿，記錄按下時間，不立即射擊或蓄力
+                        if (xPressStartTime === 0) { // 避免重複記錄
+                            xPressStartTime = frameCount;
+                        }
                     } else {
+                        // 如果火球未滿，立即發射普通子彈
                         dino.shoot();
                     }
                 }
@@ -245,7 +257,11 @@
                     dino.fireUltimate();
                     isCharging = false;
                     chargeTime = 0;
+                } else if (xPressStartTime > 0 && currentFireballs === maxFireballs) {
+                    // 如果是短按（不足以觸發蓄力），且火球已滿，則發射普通子彈
+                    dino.shoot();
                 }
+                xPressStartTime = 0; // 重置 xPressStartTime
             }
         });
 
