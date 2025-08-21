@@ -37,7 +37,7 @@
     <div id="canvas-container">
         <canvas id="gameCanvas" width="800" height="250"></canvas>
     </div>
-    <p>按<strong>空白鍵</strong>或<strong>向上箭頭</strong>跳躍 | 按 <strong>X</strong> 發射火球</p>
+    <p><strong>Z/C</strong>移動 | <strong>空白鍵</strong>跳躍 | <strong>X</strong>發射 (集滿可蓄力)</p>
 
     <script>
         const canvasContainer = document.getElementById('canvas-container');
@@ -49,12 +49,15 @@
         // --- 遊戲變數 ---
         let dino, gravity = 0.6, gameSpeed = 5, score = 0;
         let obstacles = [], fireballs = [], creatures = [], scorePopups = [], flyingEnemies = [], enemyBullets = [];
+        let ultimateFireball = null;
         let gameOver = false, gameStarted = false, frameCount = 0;
         let nextObstacleFrame, nextCreatureFrame, nextFlyingEnemySpawn = 0;
+        const keyState = {};
 
         // 資源管理
         let maxFireballs = 10, currentFireballs = 10, fireballRegenRate = 120, fireballRegenCounter = 0;
         let maxHealth = 3, dinoHealth = 3, isInvincible = false, invincibilityDuration = 120, invincibilityCounter = 0;
+        let isCharging = false, chargeTime = 0, minChargeTime = 30;
 
         // 日夜循環
         let timeInCycle = 0, transitionTime = 0, isDay = true;
@@ -68,13 +71,28 @@
         // --- 類別定義 ---
         class ScorePopup{constructor(x,y,t){this.x=x;this.y=y;this.text=t;this.life=60;this.opacity=1;}update(){this.y-=0.5;this.life--;this.opacity=this.life/60;}draw(){ctx.save();ctx.globalAlpha=this.opacity;ctx.fillStyle='#28a745';ctx.font='16px Arial';ctx.fillText(this.text,this.x,this.y);ctx.restore();}}
         class Fireball{constructor(x,y){this.x=x;this.y=y;this.width=20;this.height=10;this.speed=10;}draw(){ctx.fillStyle='#ff4500';ctx.fillRect(this.x,this.y,this.width,this.height);}update(){this.x+=this.speed;this.draw();}}
+        class UltimateFireball{constructor(x,y){this.x=x;this.y=y;this.w=50;this.h=canvas.height;this.speed=gameSpeed*2;}draw(){const grad=ctx.createLinearGradient(this.x,this.y,this.x+this.w,this.y);grad.addColorStop(0,'rgba(255,100,0,0.8)');grad.addColorStop(0.5,'rgba(255,255,0,0.8)');grad.addColorStop(1,'rgba(255,100,0,0.8)');ctx.fillStyle=grad;ctx.fillRect(this.x,this.y,this.w,this.h);}update(){this.x+=this.speed;this.draw();}}
         class Dino{
-            constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.dy=0;this.isJumping=false;this.jumpPower=-15;this.groundY=canvas.height-10;}
+            constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.dy=0;this.vx=0;this.moveSpeed=5;this.isJumping=false;this.jumpPower=-15;this.groundY=canvas.height-10;}
             draw(){if(isInvincible){if(invincibilityCounter%10<5){ctx.drawImage(dinoImage,this.x,this.y,this.w,this.h);}}else{ctx.drawImage(dinoImage,this.x,this.y,this.w,this.h);}}
-            update(){if(this.isJumping){this.dy+=gravity;this.y+=this.dy;}if(this.y+this.h>this.groundY){this.y=this.groundY-this.h;this.dy=0;this.isJumping=false;}this.draw();}
+            update(){
+                this.handleMovement();
+                this.x += this.vx;
+                if(this.isJumping){this.dy+=gravity;this.y+=this.dy;}
+                if(this.y+this.h>this.groundY){this.y=this.groundY-this.h;this.dy=0;this.isJumping=false;}
+                if(this.x<0){this.x=0;}//左邊界
+                if(this.x+this.w>canvas.width){this.x=canvas.width-this.w;}//右邊界
+                this.draw();
+            }
+            handleMovement(){
+                this.vx = 0;
+                if(keyState['KeyZ']){ this.vx = -this.moveSpeed; }
+                if(keyState['KeyC']){ this.vx = this.moveSpeed; }
+            }
             jump(){if(!this.isJumping){this.isJumping=true;this.dy=this.jumpPower;}}
-            cutJump() { if (this.dy < 0) { this.dy = 0; } } // 新增：中斷跳躍的方法
-            shoot(){if(currentFireballs>0){fireballs.push(new Fireball(this.x+this.w,this.y+this.h/2-5));currentFireballs--;}}
+            cutJump() { if (this.dy < 0) { this.dy = 0; } }
+            shoot(){if(currentFireballs>0&&!isCharging){fireballs.push(new Fireball(this.x+this.w,this.y+this.h/2-5));currentFireballs--;}}
+            fireUltimate(){if(chargeTime>=minChargeTime){ultimateFireball=new UltimateFireball(this.x+this.w,0);currentFireballs=0;}}
         }
         class Obstacle{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;}draw(){ctx.fillStyle='#d9534f';ctx.fillRect(this.x,this.y,this.w,this.h);}update(){this.x-=gameSpeed;this.draw();}}
         class Creature{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.dx=-gameSpeed*0.7;this.dy=0;this.isJumping=false;this.jumpPower=-12;this.groundY=canvas.height-10;}draw(){ctx.fillStyle='#8a2be2';ctx.fillRect(this.x,this.y,this.w,this.h);}update(){this.x+=this.dx;if(this.isJumping){this.dy+=gravity;this.y+=this.dy;}if(this.y+this.h>this.groundY){this.y=this.groundY-this.h;this.dy=0;this.isJumping=false;}for(const o of obstacles){if(o.x-this.x<80&&o.x-this.x>0&&!this.isJumping){this.jump();break;}}this.draw();}jump(){if(!this.isJumping){this.isJumping=true;this.dy=this.jumpPower;}}}
@@ -83,13 +101,17 @@
 
         // --- 遊戲邏輯處理 ---
         function handleDamage(){
+            console.log("Dino took damage! Current health:", dinoHealth);
             if(isInvincible) return;
             dinoHealth--;
             isInvincible = true;
             invincibilityCounter = 0;
             canvasContainer.classList.add('shake');
             setTimeout(() => canvasContainer.classList.remove('shake'), 500);
-            if(dinoHealth <= 0){ gameOver = true; }
+            if(dinoHealth <= 0){
+                gameOver = true;
+                console.log("Dino health reached 0. Game Over!");
+            }
         }
         function lerpColor(a,b,am){const ar=a>>16,ag=a>>8&0xff,ab=a&0xff,br=b>>16,bg=b>>8&0xff,bb=b&0xff,rr=ar+am*(br-ar),rg=ag+am*(bg-ag),rb=ab+am*(bb-ab);return(rr<<16|rg<<8|rb|0).toString(16).padStart(6,'0').replace(/^/,'#');}
         function handleDayNightCycle(){
@@ -115,6 +137,7 @@
         }
         function handleInvincibility(){if(isInvincible){invincibilityCounter++;if(invincibilityCounter>=invincibilityDuration){isInvincible=false;invincibilityCounter=0;}}}
         function handleFireballs(){for(let i=fireballs.length-1;i>=0;i--){fireballs[i].update();for(let j=creatures.length-1;j>=0;j--){if(fireballs[i]&&fireballs[i].x<creatures[j].x+creatures[j].w&&fireballs[i].x+fireballs[i].width>creatures[j].x&&fireballs[i].y<creatures[j].y+creatures[j].h&&fireballs[i].y+fireballs[i].height>creatures[j].y){const c=creatures[j];scorePopups.push(new ScorePopup(c.x,c.y,'+100'));creatures.splice(j,1);fireballs.splice(i,1);score+=100;break;}}for(let k=flyingEnemies.length-1;k>=0;k--){if(fireballs[i]&&fireballs[i].x<flyingEnemies[k].x+flyingEnemies[k].w&&fireballs[i].x+fireballs[i].width>flyingEnemies[k].x&&fireballs[i].y<flyingEnemies[k].y+flyingEnemies[k].h&&fireballs[i].y+fireballs[i].height>flyingEnemies[k].y){const fe=flyingEnemies[k];scorePopups.push(new ScorePopup(fe.x,fe.y,'+150'));flyingEnemies.splice(k,1);fireballs.splice(i,1);score+=150;break;}}if(fireballs[i]&&fireballs[i].x>canvas.width){fireballs.splice(i,1);}}}
+        function handleUltimateFireball(){if(!ultimateFireball)return;ultimateFireball.update();const uf=ultimateFireball;[obstacles,creatures,flyingEnemies,enemyBullets].forEach(arr=>{for(let i=arr.length-1;i>=0;i--){const item=arr[i];if(uf.x<item.x+item.w&&uf.x+uf.w>item.x&&uf.y<item.y+item.h&&uf.y+uf.h>item.y){arr.splice(i,1);}}});if(uf.x>canvas.width){ultimateFireball=null;}}
         function handleScorePopups(){for(let i=scorePopups.length-1;i>=0;i--){scorePopups[i].update();scorePopups[i].draw();if(scorePopups[i].life<=0){scorePopups.splice(i,1);}}}
         function handleFireballRegen(){if(currentFireballs<maxFireballs){fireballRegenCounter++;if(fireballRegenCounter>=fireballRegenRate){currentFireballs++;fireballRegenCounter=0;}}}
         function handleObstacles(){if(frameCount>nextObstacleFrame){createObstacle();setNextObstacleFrame();}for(let i=obstacles.length-1;i>=0;i--){obstacles[i].update();if(dino.x<obstacles[i].x+obstacles[i].w&&dino.x+dino.w>obstacles[i].x&&dino.y<obstacles[i].y+obstacles[i].h&&dino.y+dino.h>obstacles[i].y){handleDamage();obstacles.splice(i,1);}}}
@@ -131,20 +154,32 @@
         function createFlyingEnemy(){const s=35;flyingEnemies.push(new FlyingEnemy(canvas.width,-s,s,20));}
 
         // --- 繪圖與主迴圈 ---
+        function drawChargeIndicator(){if(!isCharging)return;const barW=dino.w,barH=5,x=dino.x,y=dino.y-10;const fillW=(chargeTime/minChargeTime)*barW;ctx.fillStyle='#00bfff';ctx.fillRect(x,y,Math.min(fillW,barW),barH);}
         function drawHealth(){ctx.fillStyle='#d9534f';ctx.font='24px Arial';let hStr='';for(let i=0;i<dinoHealth;i++){hStr+='♥';}ctx.textAlign='right';ctx.fillText(hStr,canvas.width-10,30);ctx.textAlign='left';}
         function drawInfo(){ctx.fillStyle=currentColors.fg;ctx.font='20px Arial';ctx.fillText(`分數: ${score}`,10,30);}
-        function drawFireballBar(){const bW=150,bH=15,x=10,y=40;ctx.strokeStyle=currentColors.ground;ctx.strokeRect(x,y,bW,bH);const fW=(currentFireballs/maxFireballs)*bW;ctx.fillStyle='#ff8c00';ctx.fillRect(x,y,fW,bH);ctx.fillStyle=currentColors.bg;ctx.font='12px Arial';ctx.textAlign='center';ctx.fillText(`${currentFireballs}/${maxFireballs}`,x+bW/2,y+bH-3);ctx.textAlign='left';}
+        function drawFireballBar(){const bW=150,bH=15,x=10,y=40;ctx.strokeStyle=currentColors.ground;ctx.strokeRect(x,y,bW,bH);const fillW=(currentFireballs/maxFireballs)*bW;ctx.fillStyle='#ff8c00';ctx.fillRect(x,y,fillW,bH);ctx.fillStyle=currentColors.bg;ctx.font='12px Arial';ctx.textAlign='center';ctx.fillText(`${currentFireballs}/${maxFireballs}`,x+bW/2,y+bH-3);ctx.textAlign='left';}
         function drawGround(){ctx.beginPath();ctx.moveTo(0,canvas.height-10);ctx.lineTo(canvas.width,canvas.height-10);ctx.strokeStyle=currentColors.ground;ctx.lineWidth=2;ctx.stroke();}
 
         function animate(){
-            if(gameOver){showGameOver();window.addEventListener('keydown',resetOnGameOver,{once:true});return;}
+            console.log("animate loop running. gameOver:", gameOver, "dinoHealth:", dinoHealth, "frameCount:", frameCount);
+            if(gameOver){
+                console.log("Game Over detected. Stopping animation.");
+                showGameOver();
+                window.addEventListener('keydown',resetOnGameOver,{once:true});
+                return;
+            }
             requestAnimationFrame(animate);
+            if(isCharging){
+                chargeTime++;
+                console.log("Charging: chargeTime =", chargeTime);
+            }
             ctx.clearRect(0,0,canvas.width,canvas.height);
             handleDayNightCycle();
             handleInvincibility();
             drawGround();
             dino.update();
             handleFireballs();
+            handleUltimateFireball();
             handleObstacles();
             handleCreatures();
             handleFlyingEnemies();
@@ -154,6 +189,7 @@
             drawInfo();
             drawFireballBar();
             drawHealth();
+            drawChargeIndicator();
             score++;
             frameCount++;
             if(frameCount%200===0){gameSpeed+=0.2;}
@@ -161,31 +197,59 @@
 
         // --- 遊戲狀態 ---
         function resetGame(){
+            console.log("Resetting game...");
             dino=new Dino(50,canvas.height-50,40,40);
-            obstacles=[];fireballs=[];creatures=[];scorePopups=[];flyingEnemies=[];enemyBullets=[];
+            obstacles=[];fireballs=[];creatures=[];scorePopups=[];flyingEnemies=[];enemyBullets=[];ultimateFireball=null;
             score=0;gameSpeed=5;gameOver=false;gameStarted=true;frameCount=0;
             currentFireballs=maxFireballs;fireballRegenCounter=0;
             dinoHealth=maxHealth;isInvincible=false;invincibilityCounter=0;
+            isCharging=false;chargeTime=0;
             isDay=true;timeInCycle=0;transitionTime=0;currentColors={...dayColors};
             nextFlyingEnemySpawn = 0;
             setNextObstacleFrame();
             setNextCreatureFrame();
             animate();
+            console.log("Game reset complete. Starting animation.");
         }
 
         function showGameOver(){ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.fillStyle='white';ctx.font='40px Arial';ctx.textAlign='center';ctx.fillText('遊戲結束',canvas.width/2,canvas.height/2-20);ctx.font='20px Arial';ctx.fillText(`你的分數: ${score}`,canvas.width/2,canvas.height/2+20);ctx.fillText('按任意鍵重新開始',canvas.width/2,canvas.height/2+60);ctx.textAlign='left';}
         function showStartScreen(){ctx.clearRect(0,0,canvas.width,canvas.height);drawGround();dino.draw();drawFireballBar();drawHealth();ctx.fillStyle=currentColors.fg;ctx.font='30px Arial';ctx.textAlign='center';ctx.fillText('準備好了嗎?',canvas.width/2,canvas.height/2-20);ctx.textAlign='left';}
         
         // --- 事件監聽 ---
-        function handleControls(e){const k=e.code;if(k==='Space'||k==='ArrowUp'){e.preventDefault();if(!gameStarted)resetGame();else if(!gameOver)dino.jump();}}
-        function handleJumpRelease(e){const k=e.code;if(k==='Space'||k==='ArrowUp'){if(gameStarted&&!gameOver){dino.cutJump();}}}
-        function handleShoot(e){const k=e.code;if(k==='KeyX'){if(gameStarted&&!gameOver)dino.shoot();}}
+        window.addEventListener('keydown', (e) => {
+            const k = e.code;
+            keyState[k] = true;
+            if (k === 'Space' || k === 'ArrowUp') {
+                e.preventDefault();
+                if (!gameStarted) resetGame();
+                else if (!gameOver) dino.jump();
+            } else if (k === 'KeyX') {
+                if (gameStarted && !gameOver) {
+                    if (currentFireballs === maxFireballs) {
+                        isCharging = true;
+                    } else {
+                        dino.shoot();
+                    }
+                }
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            const k = e.code;
+            keyState[k] = false;
+            if (k === 'Space' || k === 'ArrowUp') {
+                if (gameStarted && !gameOver) dino.cutJump();
+            }
+            if (k === 'KeyX') {
+                if (isCharging) {
+                    dino.fireUltimate();
+                    isCharging = false;
+                    chargeTime = 0;
+                }
+            }
+        });
 
         function resetOnGameOver(e){if(gameOver)resetGame();}
-
-        window.addEventListener('keydown', handleControls);
-        window.addEventListener('keydown', handleShoot);
-        window.addEventListener('keyup', handleJumpRelease);
 
         dinoImage.onload=()=>{dino=new Dino(50,canvas.height-50,40,40);showStartScreen();};
     </script>
