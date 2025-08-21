@@ -155,7 +155,21 @@
         function createFlyingEnemy(){const s=35;flyingEnemies.push(new FlyingEnemy(canvas.width,-s,s,20));}
 
         // --- 繪圖與主迴圈 ---
-        function drawChargeIndicator(){if(!isCharging)return;const barW=dino.w,barH=5,x=dino.x,y=dino.y-10;const fillW=(chargeTime/minChargeTime)*barW;ctx.fillStyle='#00bfff';ctx.fillRect(x,y,Math.min(fillW,barW),barH);}
+        function drawChargeIndicator(){
+            // 如果X鍵沒有被按下，或者火球能量不滿，或者沒有記錄按下時間，則不顯示蓄力條
+            if (!keyState['KeyX'] || currentFireballs !== maxFireballs || xPressStartTime === 0) {
+                return;
+            }
+
+            const barW=dino.w,barH=5,x=dino.x,y=dino.y-10;
+            
+            // 根據X鍵按下的時間來計算當前蓄力進度
+            const currentChargeProgress = frameCount - xPressStartTime;
+            const fillW=(currentChargeProgress/minChargeTime)*barW;
+
+            ctx.fillStyle='#00bfff';
+            ctx.fillRect(x,y,Math.min(fillW,barW),barH);
+        }
         function drawHealth(){ctx.fillStyle='#d9534f';ctx.font='24px Arial';let hStr='';for(let i=0;i<dinoHealth;i++){hStr+='♥';}ctx.textAlign='right';ctx.fillText(hStr,canvas.width-10,30);ctx.textAlign='left';}
         function drawInfo(){ctx.fillStyle=currentColors.fg;ctx.font='20px Arial';ctx.fillText(`分數: ${score}`,10,30);}
         function drawFireballBar(){const bW=150,bH=15,x=10,y=40;ctx.strokeStyle=currentColors.ground;ctx.strokeRect(x,y,bW,bH);const fillW=(currentFireballs/maxFireballs)*bW;ctx.fillStyle='#ff8c00';ctx.fillRect(x,y,fillW,bH);ctx.fillStyle=currentColors.bg;ctx.font='12px Arial';ctx.textAlign='center';ctx.fillText(`${currentFireballs}/${maxFireballs}`,x+bW/2,y+bH-3);ctx.textAlign='left';}
