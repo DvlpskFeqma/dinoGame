@@ -55,6 +55,15 @@
         const keyState = {};
         let xPressStartTime = 0; // 新增變數，記錄X鍵按下的時間
 
+        // 雷雨系統變數
+        let thunderstormActive = false;
+        let thunderstormStartTime = 0; // 記錄雷雨開始時間
+        const thunderstormDuration = 30 * 60; // 雷雨持續30秒
+        let lightningStrikeTimer = 0; // 雷雨期間閃電計時器
+        const lightningStrikeInterval = 5 * 60; // 雷雨期間每5秒打一次雷
+        let lightningMarks = []; // 儲存驚嘆號和天雷位置的陣列
+        let rainParticles = []; // 儲存雨滴粒子的陣列
+
         // 資源管理
         let maxFireballs = 10, currentFireballs = 10, fireballRegenRate = 120, fireballRegenCounter = 0;
         let maxHealth = 3, dinoHealth = 3, isInvincible = false, invincibilityDuration = 120, invincibilityCounter = 0;
@@ -63,7 +72,7 @@
         // 日夜循環
         let timeInCycle = 0, transitionTime = 0, isDay = true;
         const dayDuration = 15 * 60, nightDuration = 30 * 60, transitionDuration = 60;
-        const dayColors = { bg: '#ffffff', fg: '#555', ground: '#333' }, nightColors = { bg: '#2c3e50', fg: '#ecf0f1', ground: '#bdc3c7' };
+        const dayColors = { bg: '#ffffff', fg: '#555', ground: '#333' }, nightColors = { bg: '#2c3e50', fg: '#ecf0f1', ground: '#bdc3c7' }, thunderstormColors = { bg: '#000000', fg: '#aaaaaa', ground: '#555555' }; // 雷雨顏色
         let currentColors = { ...dayColors };
 
         function setNextObstacleFrame() { nextObstacleFrame = frameCount + Math.floor(Math.random() * 50 + 60); }
@@ -99,6 +108,81 @@
         class Creature{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.dx=-gameSpeed*0.7;this.dy=0;this.isJumping=false;this.jumpPower=-12;this.groundY=canvas.height-10;}draw(){ctx.fillStyle='#8a2be2';ctx.fillRect(this.x,this.y,this.w,this.h);}update(){this.x+=this.dx;if(this.isJumping){this.dy+=gravity;this.y+=this.dy;}if(this.y+this.h>this.groundY){this.y=this.groundY-this.h;this.dy=0;this.isJumping=false;}for(const o of obstacles){if(o.x-this.x<80&&o.x-this.x>0&&!this.isJumping){this.jump();break;}}this.draw();}jump(){if(!this.isJumping){this.isJumping=true;this.dy=this.jumpPower;}}}
         class EnemyBullet{constructor(x,y){this.x=x;this.y=y;this.w=4;this.h=10;this.speed=4;}draw(){ctx.fillStyle='#ffeb3b';ctx.fillRect(this.x,this.y,this.w,this.h);}update(){this.y+=this.speed;this.draw();}}
         class FlyingEnemy{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.dx=-gameSpeed*0.5;this.dy=1;this.targetY=Math.random()*60+20;this.isDescending=true;this.shootTimer=0;this.shootDelay=30;}draw(){ctx.fillStyle='#f1c40f';ctx.fillRect(this.x,this.y,this.w,this.h);}update(){if(this.isDescending){this.y+=this.dy;if(this.y>=this.targetY){this.isDescending=false;}}this.x+=this.dx;if(!this.isDescending){this.shootTimer++;if(this.shootTimer>=this.shootDelay){this.shoot();this.shootTimer=0;}}this.draw();}shoot(){enemyBullets.push(new EnemyBullet(this.x+this.w/2,this.y+this.h));}}
+
+        class LightningMark {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.strikeTimer = 1.5 * 60; // 1.5 seconds * 60 frames/second
+                this.struck = false; // Flag to ensure lightning strikes only once
+                this.width = 30; // Width for exclamation mark and lightning area
+                this.height = 30; // Height for exclamation mark
+            }
+
+            draw() {
+                if (!this.struck) {
+                    // Draw red exclamation mark
+                    ctx.fillStyle = 'red';
+                    ctx.font = '30px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('!', this.x + this.width / 2, this.y + this.height);
+                    ctx.textAlign = 'left'; // Reset
+                }
+            }
+
+            update() {
+                this.strikeTimer--;
+                if (this.strikeTimer <= 0 && !this.struck) {
+                    this.struck = true;
+                    this.strike();
+                }
+            }
+
+            strike() {
+                // Draw lightning (simple vertical line for now)
+                ctx.strokeStyle = 'yellow';
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.moveTo(this.x + this.width / 2, 0); // Top of canvas
+                ctx.lineTo(this.x + this.width / 2, canvas.height); // Bottom of canvas
+                ctx.stroke();
+
+                // Check for collision with dino
+                if (dino.x < this.x + this.width &&
+                    dino.x + dino.w > this.x &&
+                    dino.y < canvas.height && // Lightning covers full height
+                    dino.y + dino.h > 0) { // Lightning covers full height
+                    handleDamage();
+                }
+            }
+        }
+
+        class RainParticle {
+            constructor(x, y, speedY) {
+                this.x = x;
+                this.y = y;
+                this.speedY = speedY;
+                this.length = Math.random() * 10 + 5; // Random length for rain drop
+                this.width = 1; // Thin line
+            }
+
+            update() {
+                this.y += this.speedY;
+                if (this.y > canvas.height) {
+                    this.y = 0; // Loop back to top
+                    this.x = Math.random() * canvas.width; // New random x
+                }
+            }
+
+            draw() {
+                ctx.strokeStyle = 'rgba(173, 216, 230, 0.7)'; // Light blue, semi-transparent
+                ctx.lineWidth = this.width;
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y);
+                ctx.lineTo(this.x, this.y + this.length);
+                ctx.stroke();
+            }
+        }
 
         // --- 遊戲邏輯處理 ---
         function handleDamage(){
@@ -222,6 +306,60 @@
             handleCreatures();
             handleFlyingEnemies();
             handleEnemyBullets();
+
+            // 雷雨系統
+            if (score >= 2000 && !thunderstormActive) {
+                thunderstormActive = true;
+                thunderstormStartTime = frameCount;
+                lightningStrikeTimer = 0; // 重置以進行第一次打雷
+                currentColors = { ...thunderstormColors }; // 設定為雷雨顏色
+            }
+
+            if (thunderstormActive) {
+                // 檢查雷雨持續時間是否結束
+                if (frameCount - thunderstormStartTime >= thunderstormDuration) {
+                    thunderstormActive = false;
+                    currentColors = isDay ? { ...dayColors } : { ...nightColors }; // 恢復顏色
+                    rainParticles = []; // 清除雨滴粒子
+                } else {
+                    // 處理雷雨期間的閃電
+                    lightningStrikeTimer++;
+                    if (lightningStrikeTimer >= lightningStrikeInterval) {
+                        const randomX = Math.random() * (canvas.width - 30);
+                        lightningMarks.push(new LightningMark(randomX, 0));
+                        lightningStrikeTimer = 0;
+                    }
+
+                    // 生成雨滴粒子
+                    if (frameCount % 2 === 0) { // 每2幀生成一個新粒子
+                        const randomX = Math.random() * canvas.width;
+                        const randomSpeed = Math.random() * 5 + 2; // 速度介於2到7之間
+                        rainParticles.push(new RainParticle(randomX, 0, randomSpeed));
+                    }
+
+                    // 更新和繪製雨滴粒子
+                    for (let i = rainParticles.length - 1; i >= 0; i--) {
+                        rainParticles[i].update();
+                        rainParticles[i].draw();
+                    }
+                }
+            } else {
+                // 確保雷雨不活躍時清除雨滴粒子
+                if (rainParticles.length > 0) {
+                    rainParticles = [];
+                }
+            }
+
+            // 更新和繪製閃電標記，移除已擊中的
+            for (let i = lightningMarks.length - 1; i >= 0; i--) {
+                lightningMarks[i].update();
+                lightningMarks[i].draw();
+                // 移除已擊中且不再可見的標記（例如，擊中後幾幀）
+                if (lightningMarks[i].struck && lightningMarks[i].strikeTimer < -30) { // 閃電擊中後保持可見30幀
+                    lightningMarks.splice(i, 1);
+                }
+            }
+
             handleFireballRegen();
             handleScorePopups();
             drawInfo();
