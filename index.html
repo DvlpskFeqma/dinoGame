@@ -64,6 +64,14 @@
         let lightningMarks = []; // 儲存驚嘆號和天雷位置的陣列
         let rainParticles = []; // 儲存雨滴粒子的陣列
 
+        // 新武器系統變數
+        let hasNewWeapon = false;
+        let newWeaponAmmo = 0; // 新武器的彈藥量
+        const newWeaponMaxAmmo = 5; // 新武器的最大彈藥量
+        let weaponDropTimer = 0;
+        const weaponDropInterval = 5 * 60; // 每5秒掉落一次武器
+        let weaponPickups = []; // 儲存武器掉落物的陣列
+
         // 資源管理
         let maxFireballs = 10, currentFireballs = 10, fireballRegenRate = 120, fireballRegenCounter = 0;
         let maxHealth = 3, dinoHealth = 3, isInvincible = false, invincibilityDuration = 120, invincibilityCounter = 0;
@@ -101,8 +109,41 @@
             }
             jump(){if(!this.isJumping){this.isJumping=true;this.dy=this.jumpPower;}}
             cutJump() { if (this.dy < 0) { this.dy = 0; } }
-            shoot(){if(currentFireballs>0){fireballs.push(new Fireball(this.x+this.w,this.y+this.h/2-5));currentFireballs--;}}
-            fireUltimate(){if(chargeTime>=minChargeTime){ultimateFireball=new UltimateFireball(this.x+this.w,0);currentFireballs=0;}}
+            shoot(){
+                if(currentFireballs>0){
+                    if (hasNewWeapon) {
+                        // 計算PurpleBall的初始速度
+                        const initialVx = 10; // 基礎水平速度
+                        const initialVy = -5; // 基礎向上速度（負值表示向上）
+                        fireballs.push(new PurpleBall(this.x + this.w, this.y + this.h / 2 - 5, initialVx, initialVy));
+                        newWeaponAmmo--; // 減少新武器彈藥
+                        if (newWeaponAmmo <= 0) {
+                            hasNewWeapon = false; // 彈藥用完後失去武器
+                            currentFireballs = maxFireballs; // 重置火球為滿，恢復普通武器
+                        }
+                    } else {
+                        fireballs.push(new Fireball(this.x+this.w,this.y+this.h/2-5));
+                        currentFireballs--;
+                    }
+                }
+            }
+            fireUltimate(){
+                if(chargeTime>=minChargeTime){
+                    if (hasNewWeapon) {
+                        // PurpleBall的蓄力射擊
+                        const chargeMultiplier = chargeTime / minChargeTime; // 蓄力程度
+                        const initialVx = 10 + (chargeMultiplier * 5); // 增加水平速度
+                        const initialVy = -5 - (chargeMultiplier * 2); // 增加向上速度
+                        fireballs.push(new PurpleBall(this.x + this.w, this.y + this.h / 2 - 5, initialVx, initialVy));
+                        newWeaponAmmo = 0; // 蓄力射擊消耗所有彈藥
+                        hasNewWeapon = false;
+                        currentFireballs = maxFireballs; // 重置火球為滿，恢復普通武器
+                    } else {
+                        ultimateFireball=new UltimateFireball(this.x+this.w,0);
+                        currentFireballs=0;
+                    }
+                }
+            }
         }
         class Obstacle{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;}draw(){ctx.fillStyle='#d9534f';ctx.fillRect(this.x,this.y,this.w,this.h);}update(){this.x-=gameSpeed;this.draw();}}
         class Creature{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.dx=-gameSpeed*0.7;this.dy=0;this.isJumping=false;this.jumpPower=-12;this.groundY=canvas.height-10;}draw(){ctx.fillStyle='#8a2be2';ctx.fillRect(this.x,this.y,this.w,this.h);}update(){this.x+=this.dx;if(this.isJumping){this.dy+=gravity;this.y+=this.dy;}if(this.y+this.h>this.groundY){this.y=this.groundY-this.h;this.dy=0;this.isJumping=false;}for(const o of obstacles){if(o.x-this.x<80&&o.x-this.x>0&&!this.isJumping){this.jump();break;}}this.draw();}jump(){if(!this.isJumping){this.isJumping=true;this.dy=this.jumpPower;}}}
@@ -175,12 +216,109 @@
             }
 
             draw() {
-                ctx.strokeStyle = 'rgba(173, 216, 230, 0.7)'; // Light blue, semi-transparent
+                ctx.strokeStyle = 'rgba(173, 216, 230, 0.3)'; // Light blue, semi-transparent
                 ctx.lineWidth = this.width;
                 ctx.beginPath();
                 ctx.moveTo(this.x, this.y);
                 ctx.lineTo(this.x, this.y + this.length);
                 ctx.stroke();
+            }
+        }
+
+        class WeaponPickup {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.width = 25;
+                this.height = 25;
+                this.speed = 2; // Speed at which it falls
+            }
+
+            draw() {
+                ctx.fillStyle = 'purple'; // Purple square for now
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                ctx.fillStyle = 'white';
+                ctx.font = '18px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('W', this.x + this.width / 2, this.y + this.height - 5); // 'W' for Weapon
+                ctx.textAlign = 'left';
+            }
+
+            update() {
+                this.y += this.speed;
+                this.draw();
+            }
+        }
+
+        class PurpleBall {
+            constructor(x, y, initialVx, initialVy) {
+                this.x = x;
+                this.y = y;
+                this.radius = 8;
+                this.vx = initialVx;
+                this.vy = initialVy;
+                this.gravity = 0.3; // Gravity for the purple ball
+                this.exploded = false;
+                this.explosionRadius = 0;
+                this.maxExplosionRadius = 60;
+                this.explosionDuration = 30; // Frames for explosion animation
+                this.explosionFrame = 0;
+            }
+
+            draw() {
+                if (!this.exploded) {
+                    ctx.fillStyle = 'purple';
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    // Draw explosion
+                    ctx.fillStyle = `rgba(255, 165, 0, ${1 - (this.explosionFrame / this.explosionDuration)})`; // Orange, fading
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.explosionRadius, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            update() {
+                if (!this.exploded) {
+                    this.vy += this.gravity;
+                    this.x += this.vx;
+                    this.y += this.vy;
+
+                    // Check collision with ground
+                    if (this.y + this.radius > canvas.height - 10) {
+                        this.y = canvas.height - 10 - this.radius;
+                        this.exploded = true;
+                        this.explosionFrame = 0;
+                        // Play explosion sound or animation start
+                    }
+                } else {
+                    this.explosionFrame++;
+                    this.explosionRadius = this.maxExplosionRadius * (this.explosionFrame / this.explosionDuration);
+                    if (this.explosionFrame >= this.explosionDuration) {
+                        // Mark for removal
+                        return true; // Indicate that it's done exploding
+                    }
+                }
+                this.draw();
+                return false; // Not done exploding
+            }
+
+            // Check collision with enemies during explosion
+            checkExplosionCollision(enemies) {
+                if (this.exploded && this.explosionFrame > 0 && this.explosionFrame < this.explosionDuration) {
+                    for (let i = enemies.length - 1; i >= 0; i--) {
+                        const enemy = enemies[i];
+                        const dist = Math.sqrt(Math.pow(this.x - (enemy.x + enemy.w / 2), 2) + Math.pow(this.y - (enemy.y + enemy.h / 2), 2));
+                        if (dist < this.explosionRadius + Math.max(enemy.w, enemy.h) / 2) {
+                            // Collision detected
+                            score += 100; // Example score for explosion hit
+                            scorePopups.push(new ScorePopup(enemy.x, enemy.y, '+100'));
+                            enemies.splice(i, 1);
+                        }
+                    }
+                }
             }
         }
 
@@ -221,7 +359,43 @@
             canvas.style.borderColor = currentColors.ground;
         }
         function handleInvincibility(){if(isInvincible){invincibilityCounter++;if(invincibilityCounter>=invincibilityDuration){isInvincible=false;invincibilityCounter=0;}}}
-        function handleFireballs(){for(let i=fireballs.length-1;i>=0;i--){fireballs[i].update();for(let j=creatures.length-1;j>=0;j--){if(fireballs[i]&&fireballs[i].x<creatures[j].x+creatures[j].w&&fireballs[i].x+fireballs[i].width>creatures[j].x&&fireballs[i].y<creatures[j].y+creatures[j].h&&fireballs[i].y+fireballs[i].height>creatures[j].y){const c=creatures[j];scorePopups.push(new ScorePopup(c.x,c.y,'+100'));creatures.splice(j,1);fireballs.splice(i,1);score+=100;break;}}for(let k=flyingEnemies.length-1;k>=0;k--){if(fireballs[i]&&fireballs[i].x<flyingEnemies[k].x+flyingEnemies[k].w&&fireballs[i].x+fireballs[i].width>flyingEnemies[k].x&&fireballs[i].y<flyingEnemies[k].y+flyingEnemies[k].h&&fireballs[i].y+fireballs[i].height>flyingEnemies[k].y){const fe=flyingEnemies[k];scorePopups.push(new ScorePopup(fe.x,fe.y,'+150'));flyingEnemies.splice(k,1);fireballs.splice(i,1);score+=150;break;}}if(fireballs[i]&&fireballs[i].x>canvas.width){fireballs.splice(i,1);}}}
+                function handleFireballs(){
+            for(let i=fireballs.length-1;i>=0;i--){
+                const fireball = fireballs[i];
+                let removeFireball = false;
+
+                if (fireball instanceof PurpleBall) {
+                    if (fireball.update()) { // PurpleBall.update() returns true if done exploding
+                        removeFireball = true;
+                    }
+                    // 檢查爆炸碰撞
+                    fireball.checkExplosionCollision(creatures);
+                    fireball.checkExplosionCollision(flyingEnemies);
+                    fireball.checkExplosionCollision(obstacles); // PurpleBall也可以摧毀障礙物
+                    fireball.checkExplosionCollision(enemyBullets); // PurpleBall也可以摧毀敵人的子彈
+                } else { // 普通火球
+                    fireball.update();
+                    // 現有的火球碰撞邏輯
+                    for(let j=creatures.length-1;j>=0;j--){
+                        if(fireball.x<creatures[j].x+creatures[j].w&&fireball.x+fireball.width>creatures[j].x&&fireball.y<creatures[j].y+creatures[j].h&&fireball.y+fireball.height>creatures[j].y){
+                            const c=creatures[j];scorePopups.push(new ScorePopup(c.x,c.y,'+100'));creatures.splice(j,1);removeFireball=true;score+=100;break;
+                        }
+                    }
+                    if (!removeFireball) { // 只有在尚未移除的情況下才檢查飛行敵人
+                        for(let k=flyingEnemies.length-1;k>=0;k--){
+                            if(fireball.x<flyingEnemies[k].x+flyingEnemies[k].w&&fireball.x+fireball.width>flyingEnemies[k].x&&fireball.y<flyingEnemies[k].y+flyingEnemies[k].h&&fireball.y+flyingEnemies[k].height>flyingEnemies[k].y){
+                                const fe=flyingEnemies[k];scorePopups.push(new ScorePopup(fe.x,fe.y,'+150'));flyingEnemies.splice(k,1);removeFireball=true;score+=150;break;
+                            }
+                        }
+                    }
+                    if(fireball.x>canvas.width){removeFireball=true;}
+                }
+
+                if (removeFireball) {
+                    fireballs.splice(i,1);
+                }
+            }
+        }
         function handleUltimateFireball(){
             if(!ultimateFireball)return;
             ultimateFireball.update();
@@ -272,7 +446,33 @@
         }
         function drawHealth(){ctx.fillStyle='#d9534f';ctx.font='24px Arial';let hStr='';for(let i=0;i<dinoHealth;i++){hStr+='♥';}ctx.textAlign='right';ctx.fillText(hStr,canvas.width-10,30);ctx.textAlign='left';}
         function drawInfo(){ctx.fillStyle=currentColors.fg;ctx.font='20px Arial';ctx.fillText(`分數: ${score}`,10,30);}
-        function drawFireballBar(){const bW=150,bH=15,x=10,y=40;ctx.strokeStyle=currentColors.ground;ctx.strokeRect(x,y,bW,bH);const fillW=(currentFireballs/maxFireballs)*bW;ctx.fillStyle='#ff8c00';ctx.fillRect(x,y,fillW,bH);ctx.fillStyle=currentColors.bg;ctx.font='12px Arial';ctx.textAlign='center';ctx.fillText(`${currentFireballs}/${maxFireballs}`,x+bW/2,y+bH-3);ctx.textAlign='left';}
+        function drawFireballBar(){
+            const bW=150,bH=15,x=10,y=40;
+            ctx.strokeStyle=currentColors.ground;
+            ctx.strokeRect(x,y,bW,bH);
+
+            let fillW;
+            let ammoText;
+            let barColor;
+
+            if (hasNewWeapon) {
+                fillW = (newWeaponAmmo / newWeaponMaxAmmo) * bW;
+                ammoText = `${newWeaponAmmo}/${newWeaponMaxAmmo}`;
+                barColor = 'purple';
+            } else {
+                fillW = (currentFireballs / maxFireballs) * bW;
+                ammoText = `${currentFireballs}/${maxFireballs}`;
+                barColor = '#ff8c00'; // 原始橙色
+            }
+
+            ctx.fillStyle=barColor;
+            ctx.fillRect(x,y,fillW,bH);
+            ctx.fillStyle=currentColors.bg;
+            ctx.font='12px Arial';
+            ctx.textAlign='center';
+            ctx.fillText(ammoText,x+bW/2,y+bH-3);
+            ctx.textAlign='left';
+        }
         function drawGround(){ctx.beginPath();ctx.moveTo(0,canvas.height-10);ctx.lineTo(canvas.width,canvas.height-10);ctx.strokeStyle=currentColors.ground;ctx.lineWidth=2;ctx.stroke();}
 
         function animate(){
@@ -360,6 +560,34 @@
                 }
             }
 
+            // 武器掉落系統
+            weaponDropTimer++;
+            if (weaponDropTimer >= weaponDropInterval) {
+                const randomX = Math.random() * (canvas.width - 25); // 25是掉落物的寬度
+                weaponPickups.push(new WeaponPickup(randomX, -25)); // 從畫布上方開始
+                weaponDropTimer = 0;
+            }
+
+            for (let i = weaponPickups.length - 1; i >= 0; i--) {
+                const pickup = weaponPickups[i];
+                pickup.update();
+
+                // 檢查與恐龍的碰撞
+                if (dino.x < pickup.x + pickup.width &&
+                    dino.x + dino.w > pickup.x &&
+                    dino.y < pickup.y + pickup.height &&
+                    dino.y + dino.h > pickup.y) {
+                    
+                    hasNewWeapon = true;
+                    newWeaponAmmo = newWeaponMaxAmmo;
+                    weaponPickups.splice(i, 1); // 移除掉落物
+                    // 可選：為拾取添加分數彈窗或音效
+                } else if (pickup.y > canvas.height) {
+                    // 如果掉落物掉出螢幕，則移除
+                    weaponPickups.splice(i, 1);
+                }
+            }
+
             handleFireballRegen();
             handleScorePopups();
             drawInfo();
@@ -382,6 +610,20 @@
             isCharging=false;chargeTime=0;
             isDay=true;timeInCycle=0;transitionTime=0;currentColors={...dayColors};
             nextFlyingEnemySpawn = 0;
+
+            // 重置雷雨系統變數
+            thunderstormActive = false;
+            thunderstormStartTime = 0;
+            lightningStrikeTimer = 0;
+            lightningMarks = [];
+            rainParticles = [];
+
+            // 重置新武器系統變數
+            hasNewWeapon = false;
+            newWeaponAmmo = 0;
+            weaponDropTimer = 0;
+            weaponPickups = [];
+
             setNextObstacleFrame();
             setNextCreatureFrame();
             animate();
