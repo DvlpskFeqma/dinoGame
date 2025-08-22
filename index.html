@@ -1090,6 +1090,7 @@
                     boss = new Boss(canvas.width - 150, canvas.height - 200, 150, 150); // Same size for now
                     bossHealth = maxBossHealth * 1.5; // Make second boss tougher
                     boss.isSecondBoss = true; // Flag for second boss behavior
+                    isBoss1Defeated = true; // New: Consider Boss 1 defeated when Boss 2 appears
                     // Clear existing enemies/obstacles
                     obstacles = [];
                     creatures = [];
