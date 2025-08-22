@@ -68,6 +68,11 @@
         let flashAlpha = 0; // 閃光的不透明度
         const flashDuration = 10; // 閃光持續的幀數
 
+        // 超級雷雨訊息變數
+        let superThunderstormMessageActive = false;
+        let superThunderstormMessageTimer = 0;
+        const superThunderstormMessageDuration = 180; // 訊息顯示3秒 (180 幀)
+
         // 繪製閃光效果
         function drawFlash() {
             if (flashAlpha > 0) {
@@ -696,6 +701,33 @@
         }
         function drawGround(){ctx.beginPath();ctx.moveTo(0,canvas.height-10);ctx.lineTo(canvas.width,canvas.height-10);ctx.strokeStyle=currentColors.ground;ctx.lineWidth=2;ctx.stroke();}
 
+        function drawSuperThunderstormMessage() {
+            if (superThunderstormMessageActive) {
+                const message = "雨更大了！強風來襲！"; // The message to display
+                const fontSize = 30;
+                const fadeDuration = 60; // Fade out over 1 second (60 frames)
+
+                ctx.save();
+                ctx.font = `${fontSize}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                let alpha = 1;
+                if (superThunderstormMessageTimer < fadeDuration) {
+                    alpha = superThunderstormMessageTimer / fadeDuration;
+                }
+
+                ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`; // White text, fading
+                ctx.fillText(message, canvas.width / 2, canvas.height / 2);
+                ctx.restore();
+
+                superThunderstormMessageTimer--;
+                if (superThunderstormMessageTimer <= 0) {
+                    superThunderstormMessageActive = false;
+                }
+            }
+        }
+
         function animate(){
             console.log("animate loop running. gameOver:", gameOver, "dinoHealth:", dinoHealth, "frameCount:", frameCount);
             if(gameOver){
@@ -767,6 +799,8 @@
                 lightningStrikeTimer = 0; // Reset for super thunderstorm
                 currentColors = { ...superThunderstormColors }; // Set to super thunderstorm colors
                 dinoWindForce = -1; // Dino moves left
+                superThunderstormMessageActive = true; // Activate message
+                superThunderstormMessageTimer = superThunderstormMessageDuration; // Set message duration
             }
 
             if (thunderstormActive) {
@@ -791,7 +825,7 @@
                         let randomSpeedX = 0;
                         if (superThunderstormActive) {
                             randomSpeedY = Math.random() * 8 + 5; // Faster vertical speed
-                            randomSpeedX = Math.random() * -3 - 2; // Diagonal left movement (-2 to -5)
+                            randomSpeedX = Math.random() * -5 - 5; // More horizontal movement (-5 to -10)
                         }
                         rainParticles.push(new RainParticle(randomX, 0, randomSpeedY, randomSpeedX));
                     }
@@ -852,6 +886,7 @@
             drawInfo();
             drawFireballBar();
             drawHealth();
+            drawSuperThunderstormMessage();
             drawChargeIndicator();
             score++;
             frameCount++;
