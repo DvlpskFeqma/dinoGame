@@ -72,6 +72,18 @@
         const weaponDropInterval = 5 * 60; // 每5秒掉落一次武器
         let weaponPickups = []; // 儲存武器掉落物的陣列
 
+        // BOSS 系統變數
+        let boss = null;
+        let bossActive = false;
+        const maxBossHealth = 20;
+        let bossHealth = maxBossHealth;
+        let bossShootTimer = 0;
+        const bossShootInterval = 90; // BOSS 每 1.5 秒射擊一次 (90 幀)
+        let bossSummonTimer = 0;
+        const bossSummonInterval = 180; // BOSS 每 3 秒召喚一次 (180 幀)
+        const bossMaxSummon = 3; // 連續召喚 3 個
+        let bossDefeatedCount = 0; // 追蹤BOSS被擊敗的次數
+
         // 資源管理
         let maxFireballs = 10, currentFireballs = 10, fireballRegenRate = 120, fireballRegenCounter = 0;
         let maxHealth = 3, dinoHealth = 3, isInvincible = false, invincibilityDuration = 120, invincibilityCounter = 0;
@@ -147,8 +159,111 @@
         }
         class Obstacle{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;}draw(){ctx.fillStyle='#d9534f';ctx.fillRect(this.x,this.y,this.w,this.h);}update(){this.x-=gameSpeed;this.draw();}}
         class Creature{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.dx=-gameSpeed*0.7;this.dy=0;this.isJumping=false;this.jumpPower=-12;this.groundY=canvas.height-10;}draw(){ctx.fillStyle='#8a2be2';ctx.fillRect(this.x,this.y,this.w,this.h);}update(){this.x+=this.dx;if(this.isJumping){this.dy+=gravity;this.y+=this.dy;}if(this.y+this.h>this.groundY){this.y=this.groundY-this.h;this.dy=0;this.isJumping=false;}for(const o of obstacles){if(o.x-this.x<80&&o.x-this.x>0&&!this.isJumping){this.jump();break;}}this.draw();}jump(){if(!this.isJumping){this.isJumping=true;this.dy=this.jumpPower;}}}
-        class EnemyBullet{constructor(x,y){this.x=x;this.y=y;this.w=4;this.h=10;this.speed=4;}draw(){ctx.fillStyle='#ffeb3b';ctx.fillRect(this.x,this.y,this.w,this.h);}update(){this.y+=this.speed;this.draw();}}
-        class FlyingEnemy{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.dx=-gameSpeed*0.5;this.dy=1;this.targetY=Math.random()*60+20;this.isDescending=true;this.shootTimer=0;this.shootDelay=30;}draw(){ctx.fillStyle='#f1c40f';ctx.fillRect(this.x,this.y,this.w,this.h);}update(){if(this.isDescending){this.y+=this.dy;if(this.y>=this.targetY){this.isDescending=false;}}this.x+=this.dx;if(!this.isDescending){this.shootTimer++;if(this.shootTimer>=this.shootDelay){this.shoot();this.shootTimer=0;}}this.draw();}shoot(){enemyBullets.push(new EnemyBullet(this.x+this.w/2,this.y+this.h));}}
+        class EnemyBullet{constructor(x,y,vx,vy){this.x=x;this.y=y;this.w=4;this.h=10;this.vx=vx;this.vy=vy;}draw(){ctx.fillStyle='#ffeb3b';ctx.fillRect(this.x,this.y,this.w,this.h);}update(){this.x+=this.vx;this.y+=this.vy;this.draw();}}
+        class FlyingEnemy{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.dx=-gameSpeed*0.5;this.dy=1;this.targetY=Math.random()*60+20;this.isDescending=true;this.shootTimer=0;this.shootDelay=30;}draw(){ctx.fillStyle='#f1c40f';ctx.fillRect(this.x,this.y,this.w,this.h);}update(){if(this.isDescending){this.y+=this.dy;if(this.y>=this.targetY){this.isDescending=false;}}this.x+=this.dx;if(!this.isDescending){this.shootTimer++;if(this.shootTimer>=this.shootDelay){this.shoot();this.shootTimer=0;}}this.draw();}shoot(){enemyBullets.push(new EnemyBullet(this.x+this.w/2,this.y+this.h,0,4));}}
+
+        class Boss {
+            constructor(x, y, w, h) {
+                this.x = x;
+                this.y = y;
+                this.w = w;
+                this.h = h;
+                this.health = maxBossHealth;
+                this.shootTimer = 0;
+                this.summonTimer = 0;
+                this.isSummoning = false;
+                this.summonSequenceCounter = 0;
+                this.delayBetweenSummons = 15; // Frames between each creature spawn
+            }
+
+            draw() {
+                ctx.fillStyle = 'darkred'; // Large red rectangle for the boss
+                ctx.fillRect(this.x, this.y, this.w, this.h);
+
+                // Draw health bar
+                const barWidth = this.w * 0.8;
+                const barHeight = 10;
+                const barX = this.x + (this.w - barWidth) / 2;
+                const barY = this.y - 20;
+                ctx.strokeStyle = 'white';
+                ctx.strokeRect(barX, barY, barWidth, barHeight);
+                ctx.fillStyle = 'red';
+                ctx.fillRect(barX, barY, barWidth * (this.health / maxBossHealth), barHeight);
+            }
+
+            update() {
+                // Boss stays on the right side, so no movement logic here.
+                this.draw();
+
+                // Bullet attack
+                this.shootTimer++;
+                if (this.shootTimer >= bossShootInterval) {
+                    this.shoot();
+                    this.shootTimer = 0;
+                }
+
+                // Summon creatures attack
+                if (!this.isSummoning) {
+                    this.summonTimer++;
+                    if (this.summonTimer >= bossSummonInterval) {
+                        this.summonTimer = 0;
+                        this.isSummoning = true;
+                        this.summonSequenceCounter = 0;
+                        console.log("Boss: Starting summon sequence."); // New log
+                    }
+                } else { // In summoning sequence
+                    this.summonSequenceCounter++;
+                    console.log("Boss: Summon sequence counter:", this.summonSequenceCounter, "Modulo result:", this.summonSequenceCounter % this.delayBetweenSummons, "Delay between summons:", this.delayBetweenSummons); // New log
+                    if (this.summonSequenceCounter % this.delayBetweenSummons === 0) {
+                        this.summonCreature();
+                        console.log("Boss: Summoned creature. Count:", this.summonSequenceCounter / this.delayBetweenSummons); // New log
+                        if (this.summonSequenceCounter / this.delayBetweenSummons >= bossMaxSummon) {
+                            this.isSummoning = false; // End sequence
+                            this.summonSequenceCounter = 0;
+                            console.log("Boss: Ending summon sequence."); // New log
+                        }
+                    }
+                }
+            }
+
+            shoot() {
+                // Boss fires bullets at the player
+                // For simplicity, let's make it fire EnemyBullet from its center towards dino's current position
+                const bulletX = this.x + this.w / 2;
+                const bulletY = this.y + this.h / 2;
+                // Calculate direction towards dino
+                const dirX = dino.x - bulletX;
+                const dirY = dino.y - bulletY;
+                const magnitude = Math.sqrt(dirX * dirX + dirY * dirY);
+                const speed = 5; // Speed of boss bullet
+                enemyBullets.push(new EnemyBullet(bulletX, bulletY, (dirX / magnitude) * speed, (dirY / magnitude) * speed));
+            }
+
+            summonCreature() {
+                // Summon a purple creature (Creature class already draws purple)
+                const s = 30;
+                // Spawn near the boss, but not on top of it
+                creatures.push(new Creature(this.x - s - 10, canvas.height - s - 10, s, s));
+            }
+
+            takeDamage(amount) {
+                this.health -= amount;
+                if (this.health <= 0) {
+                    this.health = 0;
+                    bossActive = false; // Boss defeated
+                    console.log("Boss: DEFEATED! bossActive set to false."); // New log
+                    bossDefeatedCount++; // Increment defeated count
+                    // Add score bonus for defeating boss
+                    score += 5000;
+                    scorePopups.push(new ScorePopup(this.x + this.w / 2, this.y + this.h / 2, '+5000 BOSS DEFEATED!'));
+                    // Clear existing enemies/bullets for a clean win
+                    creatures = [];
+                    flyingEnemies = [];
+                    enemyBullets = [];
+                    obstacles = [];
+                }
+            }
+        }
 
         class LightningMark {
             constructor(x, y) {
@@ -391,7 +506,15 @@
                     fireball.checkExplosionCollision(creatures);
                     fireball.checkExplosionCollision(flyingEnemies);
                     fireball.checkExplosionCollision(obstacles); // PurpleBall也可以摧毀障礙物
-                    fireball.checkExplosionCollision(enemyBullets); // PurpleBall也可以摧毀敵人的子彈
+                    fireball.checkExplosionCollision(enemyBullets);
+                    // New: Check collision with boss
+                    if (bossActive && boss && fireball.exploded && fireball.explosionFrame > 0 && fireball.explosionFrame < fireball.explosionDuration) {
+                        const dist = Math.sqrt(Math.pow(fireball.x - (boss.x + boss.w / 2), 2) + Math.pow(fireball.y - (boss.y + boss.h / 2), 2));
+                        if (dist < fireball.explosionRadius + Math.max(boss.w, boss.h) / 2) {
+                            boss.takeDamage(1); // PurpleBall explosion deals 1 damage
+                            scorePopups.push(new ScorePopup(boss.x + boss.w / 2, boss.y + boss.h / 2, '-1 BOSS HP'));
+                        }
+                    }
                 } else { // 普通火球
                     fireball.update();
                     // 現有的火球碰撞邏輯
@@ -406,6 +529,12 @@
                                 const fe=flyingEnemies[k];scorePopups.push(new ScorePopup(fe.x,fe.y,'+150'));flyingEnemies.splice(k,1);removeFireball=true;score+=150;break;
                             }
                         }
+                    }
+                    // New: Check collision with boss for regular fireball
+                    if (bossActive && boss && fireball.x < boss.x + boss.w && fireball.x + fireball.width > boss.x && fireball.y < boss.y + boss.h && fireball.y + fireball.height > boss.y) {
+                        boss.takeDamage(1); // Regular fireball deals 1 damage
+                        scorePopups.push(new ScorePopup(boss.x + boss.w / 2, boss.y + boss.h / 2, '-1 BOSS HP'));
+                        removeFireball = true; // Remove fireball after hitting boss
                     }
                     if(fireball.x>canvas.width){removeFireball=true;}
                 }
@@ -422,6 +551,10 @@
             [obstacles,creatures,flyingEnemies,enemyBullets].forEach(arr=>{
                 for(let i=arr.length-1;i>=0;i--){
                     const item=arr[i];
+                    // If boss is active, ultimate fireball does not affect boss
+                    if (bossActive && boss && item === boss) {
+                        continue; // Skip boss
+                    }
                     if(uf.x<item.x+item.w&&uf.x+uf.w>item.x&&uf.y<item.y+item.h&&uf.y+uf.h>item.y){
                         // 增加分數並顯示分數彈窗
                         score += 200;
@@ -434,10 +567,20 @@
         }
         function handleScorePopups(){for(let i=scorePopups.length-1;i>=0;i--){scorePopups[i].update();scorePopups[i].draw();if(scorePopups[i].life<=0){scorePopups.splice(i,1);}}}
         function handleFireballRegen(){if(currentFireballs<maxFireballs){fireballRegenCounter++;if(fireballRegenCounter>=fireballRegenRate){currentFireballs++;fireballRegenCounter=0;}}}
-        function handleObstacles(){if(frameCount>nextObstacleFrame){createObstacle();setNextObstacleFrame();}for(let i=obstacles.length-1;i>=0;i--){obstacles[i].update();if(dino.x<obstacles[i].x+obstacles[i].w&&dino.x+dino.w>obstacles[i].x&&dino.y<obstacles[i].y+obstacles[i].h&&dino.y+dino.h>obstacles[i].y){handleDamage();obstacles.splice(i,1);}}}
-        function handleCreatures(){if(frameCount>nextCreatureFrame){createCreature();setNextCreatureFrame();}for(let i=creatures.length-1;i>=0;i--){creatures[i].update();if(dino.x<creatures[i].x+creatures[i].w&&dino.x+dino.w>creatures[i].x&&dino.y<creatures[i].y+creatures[i].h&&dino.y+dino.h>creatures[i].y){handleDamage();creatures.splice(i,1);}}}
+        function handleObstacles(){
+            if (!bossActive && frameCount > nextObstacleFrame){ // Only spawn if no boss
+                createObstacle();
+                setNextObstacleFrame();
+            }
+            for(let i=obstacles.length-1;i>=0;i--){obstacles[i].update();if(dino.x<obstacles[i].x+obstacles[i].w&&dino.x+dino.w>obstacles[i].x&&dino.y<obstacles[i].y+obstacles[i].h&&dino.y+dino.h>obstacles[i].y){handleDamage();obstacles.splice(i,1);}}}
+        function handleCreatures(){
+            if (!bossActive && frameCount > nextCreatureFrame){ // Only spawn if no boss
+                createCreature();
+                setNextCreatureFrame();
+            }
+            for(let i=creatures.length-1;i>=0;i--){creatures[i].update();if(dino.x<creatures[i].x+creatures[i].w&&dino.x+dino.w>creatures[i].x&&dino.y<creatures[i].y+creatures[i].h&&dino.y+dino.h>creatures[i].y){handleDamage();creatures.splice(i,1);}}}
         function handleFlyingEnemies(){
-            if (!isDay && frameCount > nextFlyingEnemySpawn) {
+            if (!bossActive && !isDay && frameCount > nextFlyingEnemySpawn) { // Only spawn if no boss
                 createFlyingEnemy();
                 nextFlyingEnemySpawn = frameCount + Math.floor(Math.random() * 120 + 100);
             }
@@ -515,16 +658,38 @@
                 console.log("Charging: chargeTime =", chargeTime);
             }
             ctx.clearRect(0,0,canvas.width,canvas.height);
+
             handleDayNightCycle();
             handleInvincibility();
             drawGround();
             dino.update();
             handleFireballs();
             handleUltimateFireball();
+
+            // BOSS 系統
+            if (score >= 5000 && !bossActive && bossDefeatedCount === 0) {
+                bossActive = true;
+                // Boss appears on the far right, large size
+                boss = new Boss(canvas.width - 150, canvas.height - 200, 150, 150); // x, y, w, h
+                bossHealth = maxBossHealth; // Reset boss health
+                // Clear existing enemies/obstacles to focus on boss
+                obstacles = [];
+                creatures = [];
+                flyingEnemies = [];
+                enemyBullets = [];
+            }
+
+            // Always handle all types of enemies/obstacles, but their spawning is now conditional
             handleObstacles();
             handleCreatures();
             handleFlyingEnemies();
-            handleEnemyBullets();
+            handleEnemyBullets(); // This handles all enemy bullets, including boss's and flying enemies'
+
+            if (bossActive) {
+                boss.update();
+            } else {
+                // No log here, as it's the default state
+            }
 
             // 雷雨系統
             if (score >= 2000 && !thunderstormActive) {
@@ -643,6 +808,14 @@
             weaponDropTimer = 0;
             weaponPickups = [];
 
+            // 重置BOSS系統變數
+            boss = null;
+            bossActive = false;
+            bossHealth = maxBossHealth;
+            bossShootTimer = 0;
+            bossSummonTimer = 0;
+            bossDefeatedCount = 0;
+
             setNextObstacleFrame();
             setNextCreatureFrame();
             animate();
@@ -671,6 +844,12 @@
                         // 如果火球未滿，立即發射普通子彈
                         dino.shoot();
                     }
+                }
+            } else if (k === 'KeyP') { // New: Hidden key for adding points
+                if (!gameOver) {
+                    score += 5000;
+                    scorePopups.push(new ScorePopup(dino.x, dino.y, '+5000 (DEBUG)'));
+                    console.log("DEBUG: Added 5000 points. Current score:", score);
                 }
             }
         });
