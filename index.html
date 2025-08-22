@@ -113,7 +113,7 @@
                 if(currentFireballs>0){
                     if (hasNewWeapon) {
                         // 計算PurpleBall的初始速度
-                        const initialVx = 10; // 基礎水平速度
+                        const initialVx = 5; // 基礎水平速度
                         const initialVy = -5; // 基礎向上速度（負值表示向上）
                         fireballs.push(new PurpleBall(this.x + this.w, this.y + this.h / 2 - 5, initialVx, initialVy));
                         newWeaponAmmo--; // 減少新武器彈藥
@@ -280,7 +280,7 @@
                 }
             }
 
-            update() {
+            update(creatures, flyingEnemies, obstacles, enemyBullets) { // Add parameters
                 if (!this.exploded) {
                     this.vy += this.gravity;
                     this.x += this.vx;
@@ -293,11 +293,30 @@
                         this.explosionFrame = 0;
                         // Play explosion sound or animation start
                     }
+
+                    // New: Check collision with other game objects
+                    const collidableObjects = [...creatures, ...flyingEnemies, ...obstacles, ...enemyBullets];
+                    for (const obj of collidableObjects) {
+                        // Simple AABB collision for now, assuming objects have x, y, w, h
+                        // For PurpleBall (circle) and other objects (rectangles), this is an approximation.
+                        // A more accurate check would be circle-rectangle collision.
+                        // However, for simplicity and given the current game's collision style,
+                        // we can use a basic distance check or AABB for initial impact.
+                        // Let's use a simple AABB check for initial impact to trigger explosion.
+                        if (this.x - this.radius < obj.x + obj.w &&
+                            this.x + this.radius > obj.x &&
+                            this.y - this.radius < obj.y + obj.h &&
+                            this.y + this.radius > obj.y) {
+                            this.exploded = true;
+                            this.explosionFrame = 0;
+                            break; // Explode on first hit
+                        }
+                    }
+
                 } else {
                     this.explosionFrame++;
                     this.explosionRadius = this.maxExplosionRadius * (this.explosionFrame / this.explosionDuration);
                     if (this.explosionFrame >= this.explosionDuration) {
-                        // Mark for removal
                         return true; // Indicate that it's done exploding
                     }
                 }
@@ -365,7 +384,7 @@
                 let removeFireball = false;
 
                 if (fireball instanceof PurpleBall) {
-                    if (fireball.update()) { // PurpleBall.update() returns true if done exploding
+                    if (fireball.update(creatures, flyingEnemies, obstacles, enemyBullets)) { // Pass arrays
                         removeFireball = true;
                     }
                     // 檢查爆炸碰撞
@@ -383,7 +402,7 @@
                     }
                     if (!removeFireball) { // 只有在尚未移除的情況下才檢查飛行敵人
                         for(let k=flyingEnemies.length-1;k>=0;k--){
-                            if(fireball.x<flyingEnemies[k].x+flyingEnemies[k].w&&fireball.x+fireball.width>flyingEnemies[k].x&&fireball.y<flyingEnemies[k].y+flyingEnemies[k].h&&fireball.y+flyingEnemies[k].height>flyingEnemies[k].y){
+                            if(fireball.x<flyingEnemies[k].x+flyingEnemies[k].w&&fireball.x+fireball.width>flyingEnemies[k].x&&fireball.y<flyingEnemies[k].y+flyingEnemies[k].h&&fireball.y+fireball.height>flyingEnemies[k].y){
                                 const fe=flyingEnemies[k];scorePopups.push(new ScorePopup(fe.x,fe.y,'+150'));flyingEnemies.splice(k,1);removeFireball=true;score+=150;break;
                             }
                         }
