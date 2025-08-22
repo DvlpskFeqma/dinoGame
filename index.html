@@ -48,6 +48,9 @@
 
         // --- 遊戲變數 ---
         let dino, gravity = 0.6, gameSpeed = 5, score = 0;
+        let slopeAngle = 0; // Current slope angle in degrees
+        let targetSlopeAngle = 0; // Target slope angle in degrees
+        const slopeTransitionSpeed = 0.05; // Speed at which slope changes (degrees per frame)
         let obstacles = [], fireballs = [], creatures = [], scorePopups = [], flyingEnemies = [], enemyBullets = [], chargingEnemies = [];
         let ultimateFireball = null;
         let puddles = [];
@@ -137,6 +140,10 @@
             constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.dy=0;this.vx=0;this.moveSpeed=5;this.isJumping=false;this.jumpPower=-15;this.groundY=canvas.height-10;this.onPuddle=false;}
             draw(){if(isInvincible){if(invincibilityCounter%10<5){ctx.drawImage(dinoImage,this.x,this.y,this.w,this.h);}}else{ctx.drawImage(dinoImage,this.x,this.y,this.w,this.h);}}
             update(){
+                // Calculate dynamic ground Y based on slope
+                const baseGroundY = canvas.height - 10; // Base ground level at x=0
+                const currentGroundY = baseGroundY - (this.x * Math.tan(slopeAngle * Math.PI / 180));
+
                 // Check for puddle collision and apply sliding effect
                 this.onPuddle = false; // Reset
                 for (const puddle of puddles) {
@@ -170,7 +177,17 @@
                 }
                 this.x += this.vx;
                 if(this.isJumping){this.dy+=gravity;this.y+=this.dy;}
-                if(this.y+this.h>this.groundY){this.y=this.groundY-this.h;this.dy=0;this.isJumping=false;}
+                // Adjust dino's Y position to stay on the sloped ground
+                if(this.y+this.h > currentGroundY){
+                    this.y = currentGroundY - this.h;
+                    this.dy = 0;
+                    this.isJumping = false;
+                }
+                // Ensure dino doesn't go below the lowest possible ground level (canvas.height - 10)
+                if (this.y + this.h > canvas.height - 10) {
+                    this.y = canvas.height - 10 - this.h;
+                }
+
                 if(this.x<0){this.x=0;}//左邊界
                 if(this.x+this.w>canvas.width){this.x=canvas.width-this.w;}//右邊界
                 this.draw();
@@ -990,7 +1007,17 @@
             ctx.fillText(ammoText,x+bW/2,y+bH-3);
             ctx.textAlign='left';
         }
-        function drawGround(){ctx.beginPath();ctx.moveTo(0,canvas.height-10);ctx.lineTo(canvas.width,canvas.height-10);ctx.strokeStyle=currentColors.ground;ctx.lineWidth=2;ctx.stroke();}
+        function drawGround(){
+            const startY = canvas.height - 10; // Ground level at x=0
+            const endY = startY - (canvas.width * Math.tan(slopeAngle * Math.PI / 180)); // Ground level at x=canvas.width
+
+            ctx.beginPath();
+            ctx.moveTo(0, startY);
+            ctx.lineTo(canvas.width, endY);
+            ctx.strokeStyle=currentColors.ground;
+            ctx.lineWidth=2;
+            ctx.stroke();
+        }
 
         function drawSuperThunderstormMessage() {
             if (superThunderstormMessageActive) {
@@ -1130,6 +1157,18 @@
                 boss.update();
             } else {
                 // No log here, as it's the default state
+            }
+
+            // New: Slope change logic
+            if (isBoss2Defeated && score >= 40000) {
+                targetSlopeAngle = 15; // Set target to 75 degrees
+            }
+
+            // Gradually change slopeAngle
+            if (slopeAngle < targetSlopeAngle) {
+                slopeAngle = Math.min(targetSlopeAngle, slopeAngle + slopeTransitionSpeed);
+            } else if (slopeAngle > targetSlopeAngle) {
+                slopeAngle = Math.max(targetSlopeAngle, slopeAngle - slopeTransitionSpeed);
             }
 
             // 雷雨系統
@@ -1368,6 +1407,10 @@
             bossDefeatedCount = 0; // Keep this for now, might be useful for overall game progression
             isBoss1Defeated = false; // New: Reset boss 1 defeated flag
             isBoss2Defeated = false; // New: Reset boss 2 defeated flag
+
+            // Reset slope variables
+            slopeAngle = 0;
+            targetSlopeAngle = 0;
 
             setNextObstacleFrame();
             setNextCreatureFrame();
