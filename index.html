@@ -62,6 +62,10 @@
         const keyState = {};
         let xPressStartTime = 0; // 新增變數，記錄X鍵按下的時間
 
+        // --- FPS控制變數 ---
+        let fps = 60;
+        let fpsInterval, then;
+
         // 雷雨系統變數
         let thunderstormActive = false;
         let thunderstormStartTime = 0; // 記錄雷雨開始時間
@@ -1072,290 +1076,299 @@
         }
 
         function animate(){
-            console.log("Score:", score, "thunderstormActive:", thunderstormActive, "superThunderstormActive:", superThunderstormActive);
-            console.log("FloodedActive (start of frame):", floodedActive);
-            
-            if(gameOver){
-                
-                showGameOver();
-                window.addEventListener('keydown',resetOnGameOver,{once:true});
-                return;
-            }
             requestAnimationFrame(animate);
-            if (keyState['KeyX'] && currentFireballs === maxFireballs && !isCharging && xPressStartTime > 0) {
-                // 如果X鍵被按住，火球已滿，尚未蓄力，且按下時間已記錄
-                if (frameCount - xPressStartTime >= minChargeTime) {
-                    isCharging = true; // 開始蓄力
-                    chargeTime = frameCount - xPressStartTime; // 初始化蓄力時間
-                }
-            }
-            if(isCharging){
-                chargeTime++;
+
+            const now = window.performance.now();
+            const elapsed = now - then;
+
+            if (elapsed > fpsInterval) {
+                then = now - (elapsed % fpsInterval);
+
+                console.log("Score:", score, "thunderstormActive:", thunderstormActive, "superThunderstormActive:", superThunderstormActive);
+                console.log("FloodedActive (start of frame):", floodedActive);
                 
-            }
-            ctx.clearRect(0,0,canvas.width,canvas.height);
-
-            handleDayNightCycle(); // Reinserted!
-
-            score++;
-            frameCount++; // THE ONLY INCREMENT NOW
-            
-            if(frameCount%200===0){gameSpeed+=0.2;}
-
-            handleInvincibility();
-            handleFloodedState(); // Call the new function
-            drawFlash();
-            drawGround();
-            dino.update();
-            handleFireballs();
-            handleUltimateFireball();
-
-            // BOSS 系統
-            if (score >= 30000 && !isBoss2Defeated) { // Second Boss (appears at 30000 points, overrides any existing boss)
-                if (!bossActive || !boss.isSecondBoss) { // If no boss, or if it's the first boss (and we need the second)
-                    bossActive = true;
-                    boss = new Boss(canvas.width - 150, canvas.height - 200, 150, 150); // Same size for now
-                    bossHealth = maxBossHealth * 1.5; // Make second boss tougher
-                    boss.isSecondBoss = true; // Flag for second boss behavior
-                    isBoss1Defeated = true; // New: Consider Boss 1 defeated when Boss 2 appears
-                    // Clear existing enemies/obstacles
-                    obstacles = [];
-                    creatures = [];
-                    flyingEnemies = [];
-                    enemyBullets = [];
-                    chargingEnemies = [];
-                }
-            } else if (score >= 5000 && !isBoss1Defeated) { // First Boss
-                if (!bossActive || boss.isSecondBoss) { // If no boss, or if it's the second boss (and we need the first)
-                    bossActive = true;
-                    boss = new Boss(canvas.width - 150, canvas.height - 200, 150, 150); // x, y, w, h
-                    bossHealth = maxBossHealth; // Reset boss health
-                    boss.isSecondBoss = false; // Ensure it's the first boss
-                    // Clear existing enemies/obstacles to focus on boss
-                    obstacles = [];
-                    creatures = [];
-                    flyingEnemies = [];
-                    enemyBullets = [];
-                    chargingEnemies = [];
-                }
-            } else if (bossActive) { // If score conditions for no boss are met, but a boss is active
-                // This means a boss was active but its conditions are no longer met (e.g., defeated)
-                // Or it's a boss that shouldn't be there (e.g., first boss after 30000 points and defeatedCount is 1)
-                // In this case, clear the boss.
-                boss = null;
-                bossActive = false;
-            }
-
-            // Always handle all types of enemies/obstacles, but their spawning is now conditional
-            handleObstacles();
-            handleCreatures();
-            handleFlyingEnemies();
-            handleEnemyBullets(); // This handles all enemy bullets, including boss's and flying enemies'
-            handleChargingEnemies(); // New: Handle charging enemies
-
-            if (bossActive) {
-                boss.update();
-            } else {
-                // No log here, as it's the default state
-            }
-
-            // New: Slope change logic
-            if (isBoss2Defeated && score >= 40000) {
-                targetSlopeAngle = 15; // Set target to 75 degrees
-            }
-
-            // Gradually change slopeAngle
-            if (slopeAngle < targetSlopeAngle) {
-                slopeAngle = Math.min(targetSlopeAngle, slopeAngle + slopeTransitionSpeed);
-            } else if (slopeAngle > targetSlopeAngle) {
-                slopeAngle = Math.max(targetSlopeAngle, slopeAngle - slopeTransitionSpeed);
-            }
-
-            // 雷雨系統
-            if (!floodedActive && score >= 2000 && !thunderstormActive && !superThunderstormActive) {
-                thunderstormActive = true;
-                thunderstormStartTime = frameCount;
-                lightningStrikeTimer = 0; // 重置以進行第一次打雷
-                currentColors = { ...thunderstormColors }; // 設定為雷雨顏色
-            }
-
-            // 超級雷雨系統 (Activation - runs once)
-            if (!floodedActive && score >= 10000 && !superThunderstormActive) {
-                superThunderstormActive = true;
-                thunderstormActive = true; // Super thunderstorm is also a thunderstorm
-                thunderstormStartTime = frameCount; // Reset start time for super thunderstorm
-                lightningStrikeTimer = 0; // Reset for super thunderstorm
-                currentColors = { ...superThunderstormColors }; // Set to super thunderstorm colors
-                dinoWindForce = -1; // Dino moves left
-                superThunderstormMessageActive = true; // Activate message
-                superThunderstormMessageTimer = superThunderstormMessageDuration; // Set message duration
-            }
-
-            // 淹水模式
-            if (score >= 20000 && !floodedActive) {
-                floodedActive = true;
-                
-                                superThunderstormActive = false;
-                thunderstormActive = false; // Disable regular thunderstorm
-                // Reset thunderstorm related variables
-                thunderstormStartTime = 0;
-                lightningStrikeTimer = 0;
-                lightningMarks = [];
-                rainParticles = [];
-                dinoWindForce = 0; // Remove wind force
-                superThunderstormMessageActive = false; // Hide message
-
-                // Clear existing puddles
-                puddles = [];
-
-                // Set initial flooded screen color (will be handled by handleDayNightCycle or a new function)
-                // For now, just set currentColors directly
-                currentColors = { bg: '#000000', fg: '#ffffff', ground: '#000050' }; // Black background
-
-                waterLevel = 0; // Start water from bottom
-
-                // Activate flooded message
-                superThunderstormMessageActive = true;
-                superThunderstormMessageTimer = superThunderstormMessageDuration;
-            }
-            console.log("After 20000 block: thunderstormActive =", thunderstormActive, "superThunderstormActive =", superThunderstormActive, "floodedActive =", floodedActive);
-
-            // Continuous effects of Super Thunderstorm (runs every frame if superThunderstormActive)
-            if (!floodedActive && superThunderstormActive) {
-                // Puddle generation
-                if (frameCount % 100 === 0) { // 每100幀嘗試生成一個水坑
-                    console.log("Puddle generated (first block) at frame:", frameCount); // ADD THIS LOG
-                    const puddleWidth = Math.random() * 50 + 30; // 寬度 30-80
-                    const puddleHeight = 5; // 固定高度
-                    const puddleX = canvas.width;
-                    const puddleY = canvas.height - 10 - puddleHeight; // 在地面上
-                    puddles.push(new Puddle(puddleX, puddleY, puddleWidth, puddleHeight));
-                }
-            }
-
-            if (thunderstormActive) {
-                console.log("Inside thunderstormActive block. Frame:", frameCount); // ADD THIS LOG
-                    // 處理雷雨期間的閃電
-                    lightningStrikeTimer++;
-                    if (lightningStrikeTimer >= lightningStrikeInterval) {
-                        const randomX = Math.random() * (canvas.width - 30);
-                        lightningMarks.push(new LightningMark(randomX, 0));
-                        lightningStrikeTimer = 0;
-                    }
-
-                    // 生成雨滴粒子
-                    console.log("Checking frameCount for rain:", frameCount, "modulo 2:", frameCount % 2); // ADD THIS LOG
-                    if (frameCount % 2 === 0) { // 每2幀生成一個新粒子
-                        console.log("Generating rain particle at frame:", frameCount); // ADD THIS LINE
-                        const randomX = Math.random() * canvas.width;
-                        let randomSpeedY = Math.random() * 5 + 2; // 速度介於2到7之間
-                        let randomSpeedX = 0;
-                        if (superThunderstormActive) {
-                            randomSpeedY = Math.random() * 8 + 5; // Faster vertical speed
-                            randomSpeedX = Math.random() * -5 - 5; // More horizontal movement (-5 to -10)
-                        }
-                        rainParticles.push(new RainParticle(randomX, 0, randomSpeedY, randomSpeedX));
-                    }
-
-                    // 更新和繪製雨滴粒子
-                    for (let i = rainParticles.length - 1; i >= 0; i--) {
-                        rainParticles[i].update();
-                        rainParticles[i].draw();
-                    }
-
-                    if (superThunderstormActive) { // Only generate puddles during super thunderstorm
-                        // 隨機生成水坑
-                        if (frameCount % 100 === 0) { // 每100幀嘗試生成一個水坑
-                            console.log("Puddle generated (second block) at frame:", frameCount); // ADD THIS LOG
-                            const puddleWidth = Math.random() * 50 + 30; // 寬度 30-80
-                            const puddleHeight = 5; // 固定高度
-                            const puddleX = canvas.width;
-                            const puddleY = canvas.height - 10 - puddleHeight; // 在地面上
-                            puddles.push(new Puddle(puddleX, puddleY, puddleWidth, puddleHeight));
-                        }
-                    }
-            }
-
-            // 更新和繪製閃電標記，移除已擊中的
-            for (let i = lightningMarks.length - 1; i >= 0; i--) {
-                lightningMarks[i].update();
-                lightningMarks[i].draw();
-                // 移除已擊中且不再可見的標記（例如，擊中後幾幀）
-                if (lightningMarks[i].struck && lightningMarks[i].strikeTimer < -30) { // 閃電擊中後保持可見30幀
-                    lightningMarks.splice(i, 1);
-                }
-            }
-
-            // 武器掉落系統
-            weaponDropTimer++;
-            if (weaponDropTimer >= weaponDropInterval) {
-                const randomX = Math.random() * (canvas.width - 25); // 25是掉落物的寬度
-                weaponPickups.push(new WeaponPickup(randomX, -25)); // 從畫布上方開始
-                weaponDropTimer = 0;
-            }
-
-            for (let i = weaponPickups.length - 1; i >= 0; i--) {
-                const pickup = weaponPickups[i];
-                pickup.update();
-
-                // 檢查與恐龍的碰撞
-                if (dino.x < pickup.x + pickup.width &&
-                    dino.x + dino.w > pickup.x &&
-                    dino.y < pickup.y + pickup.height &&
-                    dino.y + dino.h > pickup.y) {
+                if(gameOver){
                     
-                    hasNewWeapon = true;
-                    newWeaponAmmo = newWeaponMaxAmmo;
-                    weaponPickups.splice(i, 1); // 移除掉落物
-                    // 可選：為拾取添加分數彈窗或音效
-                } else if (pickup.y > canvas.height) {
-                    // 如果掉落物掉出螢幕，則移除
-                    weaponPickups.splice(i, 1);
+                    showGameOver();
+                    window.addEventListener('keydown',resetOnGameOver,{once:true});
+                    return;
                 }
-            }
-
-            // 處理水坑
-            for (let i = puddles.length - 1; i >= 0; i--) {
-                puddles[i].update();
-                if (puddles[i].x + puddles[i].width < 0) {
-                    puddles.splice(i, 1); // 移除超出螢幕的水坑
+                
+                if (keyState['KeyX'] && currentFireballs === maxFireballs && !isCharging && xPressStartTime > 0) {
+                    // 如果X鍵被按住，火球已滿，尚未蓄力，且按下時間已記錄
+                    if (frameCount - xPressStartTime >= minChargeTime) {
+                        isCharging = true; // 開始蓄力
+                        chargeTime = frameCount - xPressStartTime; // 初始化蓄力時間
+                    }
                 }
-            }
+                if(isCharging){
+                    chargeTime++;
+                    
+                }
+                ctx.clearRect(0,0,canvas.width,canvas.height);
 
-            handleFireballRegen();
-            handleScorePopups();
-            drawInfo();
-            drawFireballBar();
-            drawHealth();
-            drawSuperThunderstormMessage();
-            drawChargeIndicator();
-            if (floodedActive) {
-                // Animate water level rising
-                if (waterLevel < canvas.height) {
-                    waterLevel += 2; // Adjust speed of rising water
-                    if (waterLevel > canvas.height) waterLevel = canvas.height;
+                handleDayNightCycle(); // Reinserted!
+
+                score++;
+                frameCount++; // THE ONLY INCREMENT NOW
+                
+                if(frameCount%200===0){gameSpeed+=0.2;}
+
+                handleInvincibility();
+                handleFloodedState(); // Call the new function
+                drawFlash();
+                drawGround();
+                dino.update();
+                handleFireballs();
+                handleUltimateFireball();
+
+                // BOSS 系統
+                if (score >= 30000 && !isBoss2Defeated) { // Second Boss (appears at 30000 points, overrides any existing boss)
+                    if (!bossActive || !boss.isSecondBoss) { // If no boss, or if it's the first boss (and we need the second)
+                        bossActive = true;
+                        boss = new Boss(canvas.width - 150, canvas.height - 200, 150, 150); // Same size for now
+                        bossHealth = maxBossHealth * 1.5; // Make second boss tougher
+                        boss.isSecondBoss = true; // Flag for second boss behavior
+                        isBoss1Defeated = true; // New: Consider Boss 1 defeated when Boss 2 appears
+                        // Clear existing enemies/obstacles
+                        obstacles = [];
+                        creatures = [];
+                        flyingEnemies = [];
+                        enemyBullets = [];
+                        chargingEnemies = [];
+                    }
+                } else if (score >= 5000 && !isBoss1Defeated) { // First Boss
+                    if (!bossActive || boss.isSecondBoss) { // If no boss, or if it's the second boss (and we need the first)
+                        bossActive = true;
+                        boss = new Boss(canvas.width - 150, canvas.height - 200, 150, 150); // x, y, w, h
+                        bossHealth = maxBossHealth; // Reset boss health
+                        boss.isSecondBoss = false; // Ensure it's the first boss
+                        // Clear existing enemies/obstacles to focus on boss
+                        obstacles = [];
+                        creatures = [];
+                        flyingEnemies = [];
+                        enemyBullets = [];
+                        chargingEnemies = [];
+                    }
+                } else if (bossActive) { // If score conditions for no boss are met, but a boss is active
+                    // This means a boss was active but its conditions are no longer met (e.g., defeated)
+                    // Or it's a boss that shouldn't be there (e.g., first boss after 30000 points and defeatedCount is 1)
+                    // In this case, clear the boss.
+                    boss = null;
+                    bossActive = false;
                 }
 
-                // Draw the rising water
-                ctx.fillStyle = 'rgba(0, 0, 100, 0.3)'; // Semi-transparent dark blue
-                ctx.fillRect(0, canvas.height - waterLevel, canvas.width, waterLevel);
+                // Always handle all types of enemies/obstacles, but their spawning is now conditional
+                handleObstacles();
+                handleCreatures();
+                handleFlyingEnemies();
+                handleEnemyBullets(); // This handles all enemy bullets, including boss's and flying enemies'
+                handleChargingEnemies(); // New: Handle charging enemies
 
-                // Bubble generation and update
-                if (frameCount % 10 === 0) { // Generate a new bubble every 10 frames
-                    const x = Math.random() * canvas.width;
-                    const y = canvas.height; // Start from the bottom
-                    const radius = Math.random() * 5 + 2; // Radius between 2 and 7
-                    const speedY = Math.random() * 0.5 + 0.5; // Speed between 0.5 and 1
-                    const opacity = 1;
-                    bubbles.push(new Bubble(x, y, radius, speedY, opacity));
+                if (bossActive) {
+                    boss.update();
+                } else {
+                    // No log here, as it's the default state
                 }
 
-                for (let i = bubbles.length - 1; i >= 0; i--) {
-                    const bubble = bubbles[i];
-                    bubble.update();
-                    bubble.draw();
-                    if (bubble.y < 0 || bubble.opacity <= 0) { // Remove if off-screen or fully faded
-                        bubbles.splice(i, 1);
+                // New: Slope change logic
+                if (isBoss2Defeated && score >= 40000) {
+                    targetSlopeAngle = 15; // Set target to 75 degrees
+                }
+
+                // Gradually change slopeAngle
+                if (slopeAngle < targetSlopeAngle) {
+                    slopeAngle = Math.min(targetSlopeAngle, slopeAngle + slopeTransitionSpeed);
+                } else if (slopeAngle > targetSlopeAngle) {
+                    slopeAngle = Math.max(targetSlopeAngle, slopeAngle - slopeTransitionSpeed);
+                }
+
+                // 雷雨系統
+                if (!floodedActive && score >= 2000 && !thunderstormActive && !superThunderstormActive) {
+                    thunderstormActive = true;
+                    thunderstormStartTime = frameCount;
+                    lightningStrikeTimer = 0; // 重置以進行第一次打雷
+                    currentColors = { ...thunderstormColors }; // 設定為雷雨顏色
+                }
+
+                // 超級雷雨系統 (Activation - runs once)
+                if (!floodedActive && score >= 10000 && !superThunderstormActive) {
+                    superThunderstormActive = true;
+                    thunderstormActive = true; // Super thunderstorm is also a thunderstorm
+                    thunderstormStartTime = frameCount; // Reset start time for super thunderstorm
+                    lightningStrikeTimer = 0; // Reset for super thunderstorm
+                    currentColors = { ...superThunderstormColors }; // Set to super thunderstorm colors
+                    dinoWindForce = -1; // Dino moves left
+                    superThunderstormMessageActive = true; // Activate message
+                    superThunderstormMessageTimer = superThunderstormMessageDuration; // Set message duration
+                }
+
+                // 淹水模式
+                if (score >= 20000 && !floodedActive) {
+                    floodedActive = true;
+                    
+                                    superThunderstormActive = false;
+                    thunderstormActive = false; // Disable regular thunderstorm
+                    // Reset thunderstorm related variables
+                    thunderstormStartTime = 0;
+                    lightningStrikeTimer = 0;
+                    lightningMarks = [];
+                    rainParticles = [];
+                    dinoWindForce = 0; // Remove wind force
+                    superThunderstormMessageActive = false; // Hide message
+
+                    // Clear existing puddles
+                    puddles = [];
+
+                    // Set initial flooded screen color (will be handled by handleDayNightCycle or a new function)
+                    // For now, just set currentColors directly
+                    currentColors = { bg: '#000000', fg: '#ffffff', ground: '#000050' }; // Black background
+
+                    waterLevel = 0; // Start water from bottom
+
+                    // Activate flooded message
+                    superThunderstormMessageActive = true;
+                    superThunderstormMessageTimer = superThunderstormMessageDuration;
+                }
+                console.log("After 20000 block: thunderstormActive =", thunderstormActive, "superThunderstormActive =", superThunderstormActive, "floodedActive =", floodedActive);
+
+                // Continuous effects of Super Thunderstorm (runs every frame if superThunderstormActive)
+                if (!floodedActive && superThunderstormActive) {
+                    // Puddle generation
+                    if (frameCount % 100 === 0) { // 每100幀嘗試生成一個水坑
+                        console.log("Puddle generated (first block) at frame:", frameCount); // ADD THIS LOG
+                        const puddleWidth = Math.random() * 50 + 30; // 寬度 30-80
+                        const puddleHeight = 5; // 固定高度
+                        const puddleX = canvas.width;
+                        const puddleY = canvas.height - 10 - puddleHeight; // 在地面上
+                        puddles.push(new Puddle(puddleX, puddleY, puddleWidth, puddleHeight));
+                    }
+                }
+
+                if (thunderstormActive) {
+                    console.log("Inside thunderstormActive block. Frame:", frameCount); // ADD THIS LOG
+                        // 處理雷雨期間的閃電
+                        lightningStrikeTimer++;
+                        if (lightningStrikeTimer >= lightningStrikeInterval) {
+                            const randomX = Math.random() * (canvas.width - 30);
+                            lightningMarks.push(new LightningMark(randomX, 0));
+                            lightningStrikeTimer = 0;
+                        }
+
+                        // 生成雨滴粒子
+                        console.log("Checking frameCount for rain:", frameCount, "modulo 2:", frameCount % 2); // ADD THIS LOG
+                        if (frameCount % 2 === 0) { // 每2幀生成一個新粒子
+                            console.log("Generating rain particle at frame:", frameCount); // ADD THIS LINE
+                            const randomX = Math.random() * canvas.width;
+                            let randomSpeedY = Math.random() * 5 + 2; // 速度介於2到7之間
+                            let randomSpeedX = 0;
+                            if (superThunderstormActive) {
+                                randomSpeedY = Math.random() * 8 + 5; // Faster vertical speed
+                                randomSpeedX = Math.random() * -5 - 5; // More horizontal movement (-5 to -10)
+                            }
+                            rainParticles.push(new RainParticle(randomX, 0, randomSpeedY, randomSpeedX));
+                        }
+
+                        // 更新和繪製雨滴粒子
+                        for (let i = rainParticles.length - 1; i >= 0; i--) {
+                            rainParticles[i].update();
+                            rainParticles[i].draw();
+                        }
+
+                        if (superThunderstormActive) { // Only generate puddles during super thunderstorm
+                            // 隨機生成水坑
+                            if (frameCount % 100 === 0) { // 每100幀嘗試生成一個水坑
+                                console.log("Puddle generated (second block) at frame:", frameCount); // ADD THIS LOG
+                                const puddleWidth = Math.random() * 50 + 30; // 寬度 30-80
+                                const puddleHeight = 5; // 固定高度
+                                const puddleX = canvas.width;
+                                const puddleY = canvas.height - 10 - puddleHeight; // 在地面上
+                                puddles.push(new Puddle(puddleX, puddleY, puddleWidth, puddleHeight));
+                            }
+                        }
+                }
+
+                // 更新和繪製閃電標記，移除已擊中的
+                for (let i = lightningMarks.length - 1; i >= 0; i--) {
+                    lightningMarks[i].update();
+                    lightningMarks[i].draw();
+                    // 移除已擊中且不再可見的標記（例如，擊中後幾幀）
+                    if (lightningMarks[i].struck && lightningMarks[i].strikeTimer < -30) { // 閃電擊中後保持可見30幀
+                        lightningMarks.splice(i, 1);
+                    }
+                }
+
+                // 武器掉落系統
+                weaponDropTimer++;
+                if (weaponDropTimer >= weaponDropInterval) {
+                    const randomX = Math.random() * (canvas.width - 25); // 25是掉落物的寬度
+                    weaponPickups.push(new WeaponPickup(randomX, -25)); // 從畫布上方開始
+                    weaponDropTimer = 0;
+                }
+
+                for (let i = weaponPickups.length - 1; i >= 0; i--) {
+                    const pickup = weaponPickups[i];
+                    pickup.update();
+
+                    // 檢查與恐龍的碰撞
+                    if (dino.x < pickup.x + pickup.width &&
+                        dino.x + dino.w > pickup.x &&
+                        dino.y < pickup.y + pickup.height &&
+                        dino.y + dino.h > pickup.y) {
+                        
+                        hasNewWeapon = true;
+                        newWeaponAmmo = newWeaponMaxAmmo;
+                        weaponPickups.splice(i, 1); // 移除掉落物
+                        // 可選：為拾取添加分數彈窗或音效
+                    } else if (pickup.y > canvas.height) {
+                        // 如果掉落物掉出螢幕，則移除
+                        weaponPickups.splice(i, 1);
+                    }
+                }
+
+                // 處理水坑
+                for (let i = puddles.length - 1; i >= 0; i--) {
+                    puddles[i].update();
+                    if (puddles[i].x + puddles[i].width < 0) {
+                        puddles.splice(i, 1); // 移除超出螢幕的水坑
+                    }
+                }
+
+                handleFireballRegen();
+                handleScorePopups();
+                drawInfo();
+                drawFireballBar();
+                drawHealth();
+                drawSuperThunderstormMessage();
+                drawChargeIndicator();
+                if (floodedActive) {
+                    // Animate water level rising
+                    if (waterLevel < canvas.height) {
+                        waterLevel += 2; // Adjust speed of rising water
+                        if (waterLevel > canvas.height) waterLevel = canvas.height;
+                    }
+
+                    // Draw the rising water
+                    ctx.fillStyle = 'rgba(0, 0, 100, 0.3)'; // Semi-transparent dark blue
+                    ctx.fillRect(0, canvas.height - waterLevel, canvas.width, waterLevel);
+
+                    // Bubble generation and update
+                    if (frameCount % 10 === 0) { // Generate a new bubble every 10 frames
+                        const x = Math.random() * canvas.width;
+                        const y = canvas.height; // Start from the bottom
+                        const radius = Math.random() * 5 + 2; // Radius between 2 and 7
+                        const speedY = Math.random() * 0.5 + 0.5; // Speed between 0.5 and 1
+                        const opacity = 1;
+                        bubbles.push(new Bubble(x, y, radius, speedY, opacity));
+                    }
+
+                    for (let i = bubbles.length - 1; i >= 0; i--) {
+                        const bubble = bubbles[i];
+                        bubble.update();
+                        bubble.draw();
+                        if (bubble.y < 0 || bubble.opacity <= 0) { // Remove if off-screen or fully faded
+                            bubbles.splice(i, 1);
+                        }
                     }
                 }
             }
@@ -1415,6 +1428,9 @@
             setNextObstacleFrame();
             setNextCreatureFrame();
             setNextChargingEnemySpawn(); // New: Initialize charging enemy spawn timer
+            
+            fpsInterval = 1000 / fps;
+            then = window.performance.now();
             animate();
             
         }
