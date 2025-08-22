@@ -50,6 +50,7 @@
         let dino, gravity = 0.6, gameSpeed = 5, score = 0;
         let obstacles = [], fireballs = [], creatures = [], scorePopups = [], flyingEnemies = [], enemyBullets = [];
         let ultimateFireball = null;
+        let puddles = [];
         let gameOver = false, gameStarted = false, frameCount = 0;
         let nextObstacleFrame, nextCreatureFrame, nextFlyingEnemySpawn = 0;
         const keyState = {};
@@ -127,10 +128,36 @@
         class Fireball{constructor(x,y){this.x=x;this.y=y;this.width=20;this.height=10;this.speed=10;}draw(){ctx.fillStyle='#ff4500';ctx.fillRect(this.x,this.y,this.width,this.height);ctx.strokeStyle='black';ctx.lineWidth=1;ctx.strokeRect(this.x,this.y,this.width,this.height);}update(){this.x+=this.speed;this.draw();}}
         class UltimateFireball{constructor(x,y){this.x=x;this.y=y;this.w=50;this.h=canvas.height;this.speed=gameSpeed*1.5;}draw(){const grad=ctx.createLinearGradient(this.x,this.y,this.x+this.w,this.y);grad.addColorStop(0,'rgba(255,100,0,0.8)');grad.addColorStop(0.5,'rgba(255,255,0,0.8)');grad.addColorStop(1,'rgba(255,100,0,0.8)');ctx.fillStyle=grad;ctx.fillRect(this.x,this.y,this.w,this.h);ctx.strokeStyle='black';ctx.lineWidth=1;ctx.strokeRect(this.x,this.y,this.w,this.h);}update(){this.x+=this.speed;this.draw();}}
         class Dino{
-            constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.dy=0;this.vx=0;this.moveSpeed=5;this.isJumping=false;this.jumpPower=-15;this.groundY=canvas.height-10;}
+            constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.dy=0;this.vx=0;this.moveSpeed=5;this.isJumping=false;this.jumpPower=-15;this.groundY=canvas.height-10;this.onPuddle=false;}
             draw(){if(isInvincible){if(invincibilityCounter%10<5){ctx.drawImage(dinoImage,this.x,this.y,this.w,this.h);}}else{ctx.drawImage(dinoImage,this.x,this.y,this.w,this.h);}}
             update(){
-                this.handleMovement();
+                // Check for puddle collision and apply sliding effect
+                this.onPuddle = false; // Reset
+                for (const puddle of puddles) {
+                    if (this.x < puddle.x + puddle.width &&
+                        this.x + this.w > puddle.x &&
+                        this.y + this.h > puddle.y &&
+                        this.y + this.h < puddle.y + puddle.height + 5) { // Small buffer for ground contact
+                        this.onPuddle = true;
+                        break;
+                    }
+                }
+
+                if (this.onPuddle) {
+                    const slideFactor = 0.5; // How much it slides (0 = no control, 1 = normal control)
+                    if (keyState['KeyZ']) {
+                        this.vx = -this.moveSpeed * slideFactor;
+                    } else if (keyState['KeyC']) {
+                        this.vx = this.moveSpeed * slideFactor;
+                    } else {
+                        // If no key pressed, continue sliding in current direction
+                        this.vx *= 0.9; // Gradually slow down
+                    }
+                } else {
+                    // Normal movement if not on puddle
+                    this.handleMovement();
+                }
+
                 // Apply wind force if super thunderstorm is active
                 if (superThunderstormActive) {
                     this.x += dinoWindForce; // Apply constant leftward force
@@ -520,6 +547,25 @@
             }
         }
 
+        class Puddle {
+            constructor(x, y, width, height) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+            }
+
+            draw() {
+                ctx.fillStyle = 'rgba(0, 100, 255, 0.5)'; // Blue, semi-transparent
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+
+            update() {
+                this.x -= gameSpeed; // Puddles move with the game speed
+                this.draw();
+            }
+        }
+
         // --- 遊戲邏輯處理 ---
         function handleDamage(){
             console.log("Dino took damage! Current health:", dinoHealth);
@@ -791,7 +837,7 @@
                 currentColors = { ...thunderstormColors }; // 設定為雷雨顏色
             }
 
-            // 超級雷雨系統
+            // 超級雷雨系統 (Activation - runs once)
             if (score >= 10000 && !superThunderstormActive) {
                 superThunderstormActive = true;
                 thunderstormActive = true; // Super thunderstorm is also a thunderstorm
@@ -801,6 +847,18 @@
                 dinoWindForce = -1; // Dino moves left
                 superThunderstormMessageActive = true; // Activate message
                 superThunderstormMessageTimer = superThunderstormMessageDuration; // Set message duration
+            }
+
+            // Continuous effects of Super Thunderstorm (runs every frame if superThunderstormActive)
+            if (superThunderstormActive) {
+                // Puddle generation
+                if (frameCount % 100 === 0) { // 每100幀嘗試生成一個水坑
+                    const puddleWidth = Math.random() * 50 + 30; // 寬度 30-80
+                    const puddleHeight = 5; // 固定高度
+                    const puddleX = canvas.width;
+                    const puddleY = canvas.height - 10 - puddleHeight; // 在地面上
+                    puddles.push(new Puddle(puddleX, puddleY, puddleWidth, puddleHeight));
+                }
             }
 
             if (thunderstormActive) {
@@ -834,6 +892,17 @@
                     for (let i = rainParticles.length - 1; i >= 0; i--) {
                         rainParticles[i].update();
                         rainParticles[i].draw();
+                    }
+
+                    if (superThunderstormActive) { // Only generate puddles during super thunderstorm
+                        // 隨機生成水坑
+                        if (frameCount % 100 === 0) { // 每100幀嘗試生成一個水坑
+                            const puddleWidth = Math.random() * 50 + 30; // 寬度 30-80
+                            const puddleHeight = 5; // 固定高度
+                            const puddleX = canvas.width;
+                            const puddleY = canvas.height - 10 - puddleHeight; // 在地面上
+                            puddles.push(new Puddle(puddleX, puddleY, puddleWidth, puddleHeight));
+                        }
                     }
                 }
             } else {
@@ -878,6 +947,14 @@
                 } else if (pickup.y > canvas.height) {
                     // 如果掉落物掉出螢幕，則移除
                     weaponPickups.splice(i, 1);
+                }
+            }
+
+            // 處理水坑
+            for (let i = puddles.length - 1; i >= 0; i--) {
+                puddles[i].update();
+                if (puddles[i].x + puddles[i].width < 0) {
+                    puddles.splice(i, 1); // 移除超出螢幕的水坑
                 }
             }
 
