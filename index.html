@@ -111,6 +111,8 @@
         const bossSummonInterval = 180; // BOSS 每 3 秒召喚一次 (180 幀)
         const bossMaxSummon = 3; // 連續召喚 3 個
         let bossDefeatedCount = 0; // 追蹤BOSS被擊敗的次數
+        let isBoss1Defeated = false; // New: Flag for Boss 1 defeat
+        let isBoss2Defeated = false; // New: Flag for Boss 2 defeat
 
         // 資源管理
         let maxFireballs = 10, currentFireballs = 10, fireballRegenRate = 120, fireballRegenCounter = 0;
@@ -219,6 +221,39 @@
         class Obstacle{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;}draw(){ctx.fillStyle='#d9534f';ctx.fillRect(this.x,this.y,this.w,this.h);ctx.strokeStyle='black';ctx.lineWidth=1;ctx.strokeRect(this.x,this.y,this.w,this.h);}update(){this.x-=gameSpeed;this.draw();}}
         class Creature{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.dx=-gameSpeed*0.7;this.dy=0;this.isJumping=false;this.jumpPower=-12;this.groundY=canvas.height-10;}draw(){ctx.fillStyle='#8a2be2';ctx.fillRect(this.x,this.y,this.w,this.h);ctx.strokeStyle='black';ctx.lineWidth=1;ctx.strokeRect(this.x,this.y,this.w,this.h);}update(){this.x+=this.dx;if(this.isJumping){this.dy+=gravity;this.y+=this.dy;}if(this.y+this.h>this.groundY){this.y=this.groundY-this.h;this.dy=0;this.isJumping=false;}for(const o of obstacles){if(o.x-this.x<80&&o.x-this.x>0&&!this.isJumping){this.jump();break;}}this.draw();}jump(){if(!this.isJumping){this.isJumping=true;this.dy=this.jumpPower;}}}
         class EnemyBullet{constructor(x,y,vx,vy){this.x=x;this.y=y;this.w=4;this.h=10;this.vx=vx;this.vy=vy;this.rotation=0;this.rotationSpeed=0.1;}draw(){ctx.save();ctx.translate(this.x+this.w/2,this.y+this.h/2);ctx.rotate(this.rotation);ctx.fillStyle='#ffeb3b';ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h);ctx.strokeStyle='black';ctx.lineWidth=1;ctx.strokeRect(-this.w/2,-this.h/2,this.w,this.h);ctx.restore();}update(){this.x+=this.vx;this.y+=this.vy;this.rotation+=this.rotationSpeed;this.draw();}}
+
+        class BarBullet {
+            constructor(x, y, vx, vy) {
+                this.x = x;
+                this.y = y;
+                this.width = 30; // Length of the bar
+                this.height = 5; // Thickness of the bar
+                this.w = this.width; // Alias for collision detection
+                this.h = this.height; // Alias for collision detection
+                this.vx = vx;
+                this.vy = vy;
+                this.rotation = Math.atan2(vy, vx); // Angle to point towards player
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y); // Translate to the tip of the bullet
+                ctx.rotate(this.rotation);
+                ctx.fillStyle = '#00ffff'; // Cyan color for bar bullet
+                ctx.fillRect(0, -this.height / 2, this.width, this.height); // Draw from tip
+                ctx.strokeStyle = 'black';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(0, -this.height / 2, this.width, this.height);
+                ctx.restore();
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.draw();
+            }
+        }
+
         class FlyingEnemy{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.dx=-gameSpeed*0.5;this.dy=1;this.targetY=Math.random()*60+20;this.isDescending=true;this.shootTimer=0;this.shootDelay=30;}draw(){ctx.fillStyle='#f1c40f';ctx.fillRect(this.x,this.y,this.w,this.h);ctx.strokeStyle='black';ctx.lineWidth=1;ctx.strokeRect(this.x,this.y,this.w,this.h);}update(){if(this.isDescending){this.y+=this.dy;if(this.y>=this.targetY){this.isDescending=false;}}this.x+=this.dx;if(!this.isDescending){this.shootTimer++;if(this.shootTimer>=this.shootDelay){this.shoot();this.shootTimer=0;}}this.draw();}shoot(){enemyBullets.push(new EnemyBullet(this.x+this.w/2,this.y+this.h,0,4));}}
 
         class ChargingEnemy {
@@ -295,11 +330,13 @@
                 this.isSummoning = false;
                 this.summonSequenceCounter = 0;
                 this.delayBetweenSummons = 15; // Frames between each creature spawn
-                
+                this.isSecondBoss = false; // New: Flag for second boss
+                this.tridentShootTimer = 0; // New: Timer for trident attack
+                this.tridentShootInterval = 180; // New: Every 3 seconds
             }
 
             draw() {
-                ctx.fillStyle = 'darkred'; // Large red rectangle for the boss
+                ctx.fillStyle = this.isSecondBoss ? 'darkblue' : 'darkred'; // Different color for second boss
                 ctx.fillRect(this.x, this.y, this.w, this.h);
                 ctx.strokeStyle = 'black'; // Add border
                 ctx.lineWidth = 1;
@@ -313,18 +350,20 @@
                 ctx.strokeStyle = 'white';
                 ctx.strokeRect(barX, barY, barWidth, barHeight);
                 ctx.fillStyle = 'red';
-                ctx.fillRect(barX, barY, barWidth * (this.health / maxBossHealth), barHeight);
+                ctx.fillRect(barX, barY, barWidth * (this.health / (this.isSecondBoss ? maxBossHealth * 1.5 : maxBossHealth)), barHeight);
             }
 
             update() {
                 // Boss stays on the right side, so no movement logic here.
                 this.draw();
 
-                // Bullet attack
-                this.shootTimer++;
-                if (this.shootTimer >= bossShootInterval) {
-                    this.shoot();
-                    this.shootTimer = 0;
+                // Bullet attack (original) - only if not second boss
+                if (!this.isSecondBoss) {
+                    this.shootTimer++;
+                    if (this.shootTimer >= bossShootInterval) {
+                        this.shoot();
+                        this.shootTimer = 0;
+                    }
                 }
 
                 // Summon creatures attack
@@ -342,11 +381,20 @@
                     if (this.summonSequenceCounter % this.delayBetweenSummons === 0) {
                         this.summonCreature();
                         
-                        if (this.summonSequenceCounter / this.delayBetweenSummons >= bossMaxSummon) {
+                        if (this.summonSequenceCounter / this.delayBetweenSummons >= (this.isSecondBoss ? 3 : bossMaxSummon)) { // Summon 3 for second boss
                             this.isSummoning = false; // End sequence
                             this.summonSequenceCounter = 0;
                             
                         }
+                    }
+                }
+
+                // New: Trident shotgun attack for second boss
+                if (this.isSecondBoss) {
+                    this.tridentShootTimer++;
+                    if (this.tridentShootTimer >= this.tridentShootInterval) {
+                        this.tridentShoot();
+                        this.tridentShootTimer = 0;
                     }
                 }
             }
@@ -364,11 +412,37 @@
                 enemyBullets.push(new EnemyBullet(bulletX, bulletY, (dirX / magnitude) * speed, (dirY / magnitude) * speed));
             }
 
+            tridentShoot() {
+                const bulletX = this.x + this.w / 2;
+                const bulletY = this.y + this.h / 2;
+                const speed = 6;
+                const spreadAngle = Math.PI / 12; // Reduced spread angle (15 degrees)
+
+                // Calculate base direction towards dino
+                const dirX = dino.x - bulletX;
+                const dirY = dino.y - bulletY;
+                const baseAngle = Math.atan2(dirY, dirX);
+
+                // Fire three bullets with spread
+                for (let i = -1; i <= 1; i++) { // -1, 0, 1 for left, center, right
+                    const angle = baseAngle + (i * spreadAngle);
+                    const vx = Math.cos(angle) * speed;
+                    const vy = Math.sin(angle) * speed;
+                    enemyBullets.push(new BarBullet(bulletX, bulletY, vx, vy)); // Fire BarBullet
+                }
+            }
+
             summonCreature() {
-                // Summon a purple creature (Creature class already draws purple)
-                const s = 30;
-                // Spawn near the boss, but not on top of it
-                creatures.push(new Creature(this.x - s - 10, canvas.height - s - 10, s, s));
+                if (this.isSecondBoss) {
+                    // Summon ChargingEnemy for second boss
+                    const s = 40; // Size of charging enemy
+                    chargingEnemies.push(new ChargingEnemy(this.x - s - 10, Math.random() * (canvas.height - s - 20) + 10, s, s));
+                } else {
+                    // Summon a purple creature (Creature class already draws purple)
+                    const s = 30;
+                    // Spawn near the boss, but not on top of it
+                    creatures.push(new Creature(this.x - s - 10, canvas.height - s - 10, s, s));
+                }
             }
 
             takeDamage(amount) {
@@ -377,7 +451,11 @@
                     this.health = 0;
                     bossActive = false; // Boss defeated
                     
-                    bossDefeatedCount++; // Increment defeated count
+                    if (this.isSecondBoss) {
+                        isBoss2Defeated = true;
+                    } else {
+                        isBoss1Defeated = true;
+                    }
                     // Add score bonus for defeating boss
                     score += 5000;
                     scorePopups.push(new ScorePopup(this.x + this.w / 2, this.y + this.h / 2, '+5000 BOSS DEFEATED!'));
@@ -386,6 +464,7 @@
                     flyingEnemies = [];
                     enemyBullets = [];
                     obstacles = [];
+                    chargingEnemies = []; // Clear charging enemies too
                 }
             }
         }
@@ -750,6 +829,15 @@
                             }
                         }
                     }
+                    if (!removeFireball) { // New: Check for BarBullets
+                        for(let m=enemyBullets.length-1;m>=0;m--){
+                            if (enemyBullets[m] instanceof BarBullet) { // Only check if it's a BarBullet
+                                if(fireball.x<enemyBullets[m].x+enemyBullets[m].w&&fireball.x+fireball.width>enemyBullets[m].x&&fireball.y<enemyBullets[m].y+enemyBullets[m].h&&fireball.y+fireball.height>enemyBullets[m].y){
+                                    const bb=enemyBullets[m];scorePopups.push(new ScorePopup(bb.x,bb.y,'+50'));enemyBullets.splice(m,1);removeFireball=true;score+=50;break;
+                                }
+                            }
+                        }
+                    }
                     // New: Check collision with boss for regular fireball
                     if (bossActive && boss && fireball.x < boss.x + boss.w && fireball.x + fireball.width > boss.x && fireball.y < boss.y + boss.h && fireball.y + fireball.height > boss.y) {
                         boss.takeDamage(1); // Regular fireball deals 1 damage
@@ -775,11 +863,28 @@
                     if (bossActive && boss && item === boss) {
                         continue; // Skip boss
                     }
-                    if(uf.x<item.x+item.w&&uf.x+uf.w>item.x&&uf.y<item.y+item.h&&uf.y+uf.h>item.y){
-                        // 增加分數並顯示分數彈窗
-                        score += 200;
-                        scorePopups.push(new ScorePopup(item.x, item.y, '+200'));
-                        arr.splice(i,1);
+                    // Special handling for enemyBullets to check for BarBullet
+                    if (arr === enemyBullets) {
+                        if (item instanceof BarBullet) { // Only affect BarBullets
+                            if(uf.x<item.x+item.w&&uf.x+uf.w>item.x&&uf.y<item.y+item.h&&uf.y+uf.h>item.y){
+                                score += 50; // Score for destroying BarBullet
+                                scorePopups.push(new ScorePopup(item.x, item.y, '+50'));
+                                arr.splice(i,1);
+                            }
+                        } else { // Regular enemy bullets
+                            if(uf.x<item.x+item.w&&uf.x+uf.w>item.x&&uf.y<item.y+item.h&&uf.y+uf.h>item.y){
+                                score += 200;
+                                scorePopups.push(new ScorePopup(item.x, item.y, '+200'));
+                                arr.splice(i,1);
+                            }
+                        }
+                    } else { // Other types of enemies/obstacles
+                        if(uf.x<item.x+item.w&&uf.x+uf.w>item.x&&uf.y<item.y+item.h&&uf.y+uf.h>item.y){
+                            // 增加分數並顯示分數彈窗
+                            score += 200;
+                            scorePopups.push(new ScorePopup(item.x, item.y, '+200'));
+                            arr.splice(i,1);
+                        }
                     }
                 }
             });
@@ -808,7 +913,7 @@
         function handleEnemyBullets(){for(let i=enemyBullets.length-1;i>=0;i--){enemyBullets[i].update();if(dino.x<enemyBullets[i].x+enemyBullets[i].w&&dino.x+dino.w>enemyBullets[i].x&&dino.y<enemyBullets[i].y+enemyBullets[i].h&&dino.y+dino.h>enemyBullets[i].y){handleDamage();enemyBullets.splice(i,1);}if(enemyBullets[i]&&enemyBullets[i].y>canvas.height){enemyBullets.splice(i,1);}}}
 
         function handleChargingEnemies(){
-            if (score >= 20000 && frameCount > nextChargingEnemySpawn) {
+            if (!bossActive && score >= 20000 && frameCount > nextChargingEnemySpawn) {
                 createChargingEnemy();
                 setNextChargingEnemySpawn();
             }
@@ -941,7 +1046,7 @@
 
         function animate(){
             console.log("Score:", score, "thunderstormActive:", thunderstormActive, "superThunderstormActive:", superThunderstormActive);
-            console.log("FloodedActive (start of frame):", floodedActive); // ADD THIS LINE
+            console.log("FloodedActive (start of frame):", floodedActive);
             
             if(gameOver){
                 
@@ -979,16 +1084,38 @@
             handleUltimateFireball();
 
             // BOSS 系統
-            if (score >= 5000 && !bossActive && bossDefeatedCount === 0) {
-                bossActive = true;
-                // Boss appears on the far right, large size
-                boss = new Boss(canvas.width - 150, canvas.height - 200, 150, 150); // x, y, w, h
-                bossHealth = maxBossHealth; // Reset boss health
-                // Clear existing enemies/obstacles to focus on boss
-                obstacles = [];
-                creatures = [];
-                flyingEnemies = [];
-                enemyBullets = [];
+            if (score >= 30000 && !isBoss2Defeated) { // Second Boss (appears at 30000 points, overrides any existing boss)
+                if (!bossActive || !boss.isSecondBoss) { // If no boss, or if it's the first boss (and we need the second)
+                    bossActive = true;
+                    boss = new Boss(canvas.width - 150, canvas.height - 200, 150, 150); // Same size for now
+                    bossHealth = maxBossHealth * 1.5; // Make second boss tougher
+                    boss.isSecondBoss = true; // Flag for second boss behavior
+                    // Clear existing enemies/obstacles
+                    obstacles = [];
+                    creatures = [];
+                    flyingEnemies = [];
+                    enemyBullets = [];
+                    chargingEnemies = [];
+                }
+            } else if (score >= 5000 && !isBoss1Defeated) { // First Boss
+                if (!bossActive || boss.isSecondBoss) { // If no boss, or if it's the second boss (and we need the first)
+                    bossActive = true;
+                    boss = new Boss(canvas.width - 150, canvas.height - 200, 150, 150); // x, y, w, h
+                    bossHealth = maxBossHealth; // Reset boss health
+                    boss.isSecondBoss = false; // Ensure it's the first boss
+                    // Clear existing enemies/obstacles to focus on boss
+                    obstacles = [];
+                    creatures = [];
+                    flyingEnemies = [];
+                    enemyBullets = [];
+                    chargingEnemies = [];
+                }
+            } else if (bossActive) { // If score conditions for no boss are met, but a boss is active
+                // This means a boss was active but its conditions are no longer met (e.g., defeated)
+                // Or it's a boss that shouldn't be there (e.g., first boss after 30000 points and defeatedCount is 1)
+                // In this case, clear the boss.
+                boss = null;
+                bossActive = false;
             }
 
             // Always handle all types of enemies/obstacles, but their spawning is now conditional
@@ -1237,7 +1364,9 @@
             bossHealth = maxBossHealth;
             bossShootTimer = 0;
             bossSummonTimer = 0;
-            bossDefeatedCount = 0;
+            bossDefeatedCount = 0; // Keep this for now, might be useful for overall game progression
+            isBoss1Defeated = false; // New: Reset boss 1 defeated flag
+            isBoss2Defeated = false; // New: Reset boss 2 defeated flag
 
             setNextObstacleFrame();
             setNextCreatureFrame();
