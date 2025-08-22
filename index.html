@@ -64,6 +64,25 @@
         let lightningMarks = []; // 儲存驚嘆號和天雷位置的陣列
         let rainParticles = []; // 儲存雨滴粒子的陣列
 
+        // 閃電閃光效果變數
+        let flashAlpha = 0; // 閃光的不透明度
+        const flashDuration = 10; // 閃光持續的幀數
+
+        // 繪製閃光效果
+        function drawFlash() {
+            if (flashAlpha > 0) {
+                ctx.fillStyle = `rgba(255, 255, 255, ${flashAlpha})`;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                flashAlpha -= (0.8 / flashDuration); // 逐漸減弱
+                if (flashAlpha < 0) flashAlpha = 0;
+            }
+        }
+
+        // 超級雷雨系統變數
+        let superThunderstormActive = false;
+        const superThunderstormColors = { bg: '#000000', fg: '#888888', ground: '#333333' };
+        let dinoWindForce = 0;
+
         // 新武器系統變數
         let hasNewWeapon = false;
         let newWeaponAmmo = 0; // 新武器的彈藥量
@@ -107,6 +126,10 @@
             draw(){if(isInvincible){if(invincibilityCounter%10<5){ctx.drawImage(dinoImage,this.x,this.y,this.w,this.h);}}else{ctx.drawImage(dinoImage,this.x,this.y,this.w,this.h);}}
             update(){
                 this.handleMovement();
+                // Apply wind force if super thunderstorm is active
+                if (superThunderstormActive) {
+                    this.x += dinoWindForce; // Apply constant leftward force
+                }
                 this.x += this.vx;
                 if(this.isJumping){this.dy+=gravity;this.y+=this.dy;}
                 if(this.y+this.h>this.groundY){this.y=this.groundY-this.h;this.dy=0;this.isJumping=false;}
@@ -302,13 +325,31 @@
             }
 
             strike() {
-                // Draw lightning (simple vertical line for now)
-                ctx.strokeStyle = 'yellow';
-                ctx.lineWidth = 5;
+                // Core lightning bolt
+                ctx.strokeStyle = 'white'; // Brighter core
+                ctx.lineWidth = 8; // Thicker
                 ctx.beginPath();
-                ctx.moveTo(this.x + this.width / 2, 0); // Top of canvas
-                ctx.lineTo(this.x + this.width / 2, canvas.height); // Bottom of canvas
+                ctx.moveTo(this.x + this.width / 2, 0);
+                ctx.lineTo(this.x + this.width / 2, canvas.height);
                 ctx.stroke();
+
+                // Outer glow 1
+                ctx.strokeStyle = 'rgba(255, 255, 0, 0.6)'; // Yellowish, semi-transparent
+                ctx.lineWidth = 12; // Wider glow
+                ctx.beginPath();
+                ctx.moveTo(this.x + this.width / 2, 0);
+                ctx.lineTo(this.x + this.width / 2, canvas.height);
+                ctx.stroke();
+
+                // Outer glow 2
+                ctx.strokeStyle = 'rgba(255, 255, 0, 0.3)'; // More transparent
+                ctx.lineWidth = 16; // Even wider glow
+                ctx.beginPath();
+                ctx.moveTo(this.x + this.width / 2, 0);
+                ctx.lineTo(this.x + this.width / 2, canvas.height);
+                ctx.stroke();
+
+                flashAlpha = 0.8; // Trigger flash
 
                 // Check for collision with dino
                 if (dino.x < this.x + this.width &&
@@ -321,20 +362,25 @@
         }
 
         class RainParticle {
-            constructor(x, y, speedY) {
+            constructor(x, y, speedY, speedX = 0) { // Added speedX
                 this.x = x;
                 this.y = y;
                 this.speedY = speedY;
-                this.length = Math.random() * 10 + 5; // Random length for rain drop
+                this.speedX = speedX; // New
+                this.length = Math.random() * 20 + 10; // Longer rain drop
                 this.width = 1; // Thin line
             }
 
             update() {
+                this.x += this.speedX; // New
                 this.y += this.speedY;
                 if (this.y > canvas.height) {
                     this.y = 0; // Loop back to top
                     this.x = Math.random() * canvas.width; // New random x
                 }
+                // If it goes off screen left/right, wrap around
+                if (this.x < 0) this.x = canvas.width;
+                if (this.x > canvas.width) this.x = 0;
             }
 
             draw() {
@@ -674,6 +720,7 @@
 
             handleDayNightCycle();
             handleInvincibility();
+            drawFlash();
             drawGround();
             dino.update();
             handleFireballs();
@@ -705,11 +752,21 @@
             }
 
             // 雷雨系統
-            if (score >= 2000 && !thunderstormActive) {
+            if (score >= 2000 && !thunderstormActive && !superThunderstormActive) {
                 thunderstormActive = true;
                 thunderstormStartTime = frameCount;
                 lightningStrikeTimer = 0; // 重置以進行第一次打雷
                 currentColors = { ...thunderstormColors }; // 設定為雷雨顏色
+            }
+
+            // 超級雷雨系統
+            if (score >= 10000 && !superThunderstormActive) {
+                superThunderstormActive = true;
+                thunderstormActive = true; // Super thunderstorm is also a thunderstorm
+                thunderstormStartTime = frameCount; // Reset start time for super thunderstorm
+                lightningStrikeTimer = 0; // Reset for super thunderstorm
+                currentColors = { ...superThunderstormColors }; // Set to super thunderstorm colors
+                dinoWindForce = -1; // Dino moves left
             }
 
             if (thunderstormActive) {
@@ -730,8 +787,13 @@
                     // 生成雨滴粒子
                     if (frameCount % 2 === 0) { // 每2幀生成一個新粒子
                         const randomX = Math.random() * canvas.width;
-                        const randomSpeed = Math.random() * 5 + 2; // 速度介於2到7之間
-                        rainParticles.push(new RainParticle(randomX, 0, randomSpeed));
+                        let randomSpeedY = Math.random() * 5 + 2; // 速度介於2到7之間
+                        let randomSpeedX = 0;
+                        if (superThunderstormActive) {
+                            randomSpeedY = Math.random() * 8 + 5; // Faster vertical speed
+                            randomSpeedX = Math.random() * -3 - 2; // Diagonal left movement (-2 to -5)
+                        }
+                        rainParticles.push(new RainParticle(randomX, 0, randomSpeedY, randomSpeedX));
                     }
 
                     // 更新和繪製雨滴粒子
@@ -814,6 +876,10 @@
             lightningStrikeTimer = 0;
             lightningMarks = [];
             rainParticles = [];
+
+            // 重置超級雷雨系統變數
+            superThunderstormActive = false;
+            dinoWindForce = 0;
 
             // 重置新武器系統變數
             hasNewWeapon = false;
