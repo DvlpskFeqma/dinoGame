@@ -810,7 +810,8 @@
         }
 
         function animate(){
-            console.log("Score:", score, "thunderstormActive:", thunderstormActive, "superThunderstormActive:", superThunderstormActive); // ADD THIS LINE
+            console.log("Score:", score, "thunderstormActive:", thunderstormActive, "superThunderstormActive:", superThunderstormActive);
+            console.log("FloodedActive (start of frame):", floodedActive); // ADD THIS LINE
             
             if(gameOver){
                 
@@ -835,7 +836,8 @@
             handleDayNightCycle(); // Reinserted!
 
             score++;
-            frameCount++;
+            frameCount++; // THE ONLY INCREMENT NOW
+            
             if(frameCount%200===0){gameSpeed+=0.2;}
 
             handleInvincibility();
@@ -872,7 +874,7 @@
             }
 
             // 雷雨系統
-            if (score >= 2000 && !thunderstormActive && !superThunderstormActive) {
+            if (!floodedActive && score >= 2000 && !thunderstormActive && !superThunderstormActive) {
                 thunderstormActive = true;
                 thunderstormStartTime = frameCount;
                 lightningStrikeTimer = 0; // 重置以進行第一次打雷
@@ -880,7 +882,7 @@
             }
 
             // 超級雷雨系統 (Activation - runs once)
-            if (score >= 10000 && !superThunderstormActive) {
+            if (!floodedActive && score >= 10000 && !superThunderstormActive) {
                 superThunderstormActive = true;
                 thunderstormActive = true; // Super thunderstorm is also a thunderstorm
                 thunderstormStartTime = frameCount; // Reset start time for super thunderstorm
@@ -894,7 +896,8 @@
             // 淹水模式
             if (score >= 20000 && !floodedActive) {
                 floodedActive = true;
-                superThunderstormActive = false; // Disable super thunderstorm
+                
+                                superThunderstormActive = false;
                 thunderstormActive = false; // Disable regular thunderstorm
                 // Reset thunderstorm related variables
                 thunderstormStartTime = 0;
@@ -917,11 +920,13 @@
                 superThunderstormMessageActive = true;
                 superThunderstormMessageTimer = superThunderstormMessageDuration;
             }
+            console.log("After 20000 block: thunderstormActive =", thunderstormActive, "superThunderstormActive =", superThunderstormActive, "floodedActive =", floodedActive);
 
             // Continuous effects of Super Thunderstorm (runs every frame if superThunderstormActive)
             if (!floodedActive && superThunderstormActive) {
                 // Puddle generation
                 if (frameCount % 100 === 0) { // 每100幀嘗試生成一個水坑
+                    console.log("Puddle generated (first block) at frame:", frameCount); // ADD THIS LOG
                     const puddleWidth = Math.random() * 50 + 30; // 寬度 30-80
                     const puddleHeight = 5; // 固定高度
                     const puddleX = canvas.width;
@@ -963,6 +968,7 @@
                     if (superThunderstormActive) { // Only generate puddles during super thunderstorm
                         // 隨機生成水坑
                         if (frameCount % 100 === 0) { // 每100幀嘗試生成一個水坑
+                            console.log("Puddle generated (second block) at frame:", frameCount); // ADD THIS LOG
                             const puddleWidth = Math.random() * 50 + 30; // 寬度 30-80
                             const puddleHeight = 5; // 固定高度
                             const puddleX = canvas.width;
