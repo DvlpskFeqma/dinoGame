@@ -51,6 +51,8 @@
         let obstacles = [], fireballs = [], creatures = [], scorePopups = [], flyingEnemies = [], enemyBullets = [];
         let ultimateFireball = null;
         let puddles = [];
+        let floodedActive = false;
+        let waterLevel = 0; // Current height of the rising water, starts from 0 (bottom)
         let gameOver = false, gameStarted = false, frameCount = 0;
         let nextObstacleFrame, nextCreatureFrame, nextFlyingEnemySpawn = 0;
         const keyState = {};
@@ -158,8 +160,8 @@
                     this.handleMovement();
                 }
 
-                // Apply wind force if super thunderstorm is active
-                if (superThunderstormActive) {
+                // Apply wind force if super thunderstorm is active AND not flooded
+                if (superThunderstormActive && !floodedActive) {
                     this.x += dinoWindForce; // Apply constant leftward force
                 }
                 this.x += this.vx;
@@ -582,6 +584,14 @@
         }
         function lerpColor(a,b,am){const ar=a>>16,ag=a>>8&0xff,ab=a&0xff,br=b>>16,bg=b>>8&0xff,bb=b&0xff,rr=ar+am*(br-ar),rg=ag+am*(bg-ag),rb=ab+am*(bb-ab);return(rr<<16|rg<<8|rb|0).toString(16).padStart(6,'0').replace(/^/,'#');}
         function handleDayNightCycle(){
+            if (floodedActive) {
+                // Keep it day
+                // document.body.style.backgroundColor = dayColors.bg; // This sets it to white!
+                document.querySelector('h1').style.color = dayColors.fg;
+                document.querySelector('p').style.color = dayColors.fg;
+                canvas.style.borderColor = dayColors.ground;
+                return; // Stop further processing
+            }
             timeInCycle++;
             let dur = isDay ? dayDuration : nightDuration;
             if (timeInCycle > dur) {
@@ -749,7 +759,13 @@
 
         function drawSuperThunderstormMessage() {
             if (superThunderstormMessageActive) {
-                const message = "雨更大了！強風來襲！"; // The message to display
+                let message = "";
+                if (floodedActive) {
+                    message = "海嘯來襲"; // Message for flooded state
+                } else {
+                    message = "雨更大了！強風來襲！"; // Original message for super thunderstorm
+                }
+
                 const fontSize = 30;
                 const fadeDuration = 60; // Fade out over 1 second (60 frames)
 
@@ -771,6 +787,25 @@
                 if (superThunderstormMessageTimer <= 0) {
                     superThunderstormMessageActive = false;
                 }
+            }
+        }
+
+        function handleFloodedState() {
+            if (floodedActive) {
+                // Adjust dino properties for sluggish movement
+                dino.moveSpeed = 2; // Slower horizontal movement
+                dino.jumpPower = -8; // Weaker jump
+                gravity = 0.2; // Reduced gravity for floatiness
+
+                // Apply continuous slow deceleration if no keys are pressed
+                if (!keyState['KeyZ'] && !keyState['KeyC']) {
+                    dino.vx *= 0.95; // Slowly decelerate
+                }
+            } else {
+                // Reset to normal values if not flooded
+                dino.moveSpeed = 5;
+                dino.jumpPower = -15;
+                gravity = 0.6;
             }
         }
 
@@ -796,8 +831,14 @@
             }
             ctx.clearRect(0,0,canvas.width,canvas.height);
 
-            handleDayNightCycle();
+            handleDayNightCycle(); // Reinserted!
+
+            score++;
+            frameCount++;
+            if(frameCount%200===0){gameSpeed+=0.2;}
+
             handleInvincibility();
+            handleFloodedState(); // Call the new function
             drawFlash();
             drawGround();
             dino.update();
@@ -849,8 +890,35 @@
                 superThunderstormMessageTimer = superThunderstormMessageDuration; // Set message duration
             }
 
+            // 淹水模式
+            if (score >= 20000 && !floodedActive) {
+                floodedActive = true;
+                superThunderstormActive = false; // Disable super thunderstorm
+                thunderstormActive = false; // Disable regular thunderstorm
+                // Reset thunderstorm related variables
+                thunderstormStartTime = 0;
+                lightningStrikeTimer = 0;
+                lightningMarks = [];
+                rainParticles = [];
+                dinoWindForce = 0; // Remove wind force
+                superThunderstormMessageActive = false; // Hide message
+
+                // Clear existing puddles
+                puddles = [];
+
+                // Set initial flooded screen color (will be handled by handleDayNightCycle or a new function)
+                // For now, just set currentColors directly
+                currentColors = { bg: '#000000', fg: '#ffffff', ground: '#000050' }; // Black background
+
+                waterLevel = 0; // Start water from bottom
+
+                // Activate flooded message
+                superThunderstormMessageActive = true;
+                superThunderstormMessageTimer = superThunderstormMessageDuration;
+            }
+
             // Continuous effects of Super Thunderstorm (runs every frame if superThunderstormActive)
-            if (superThunderstormActive) {
+            if (!floodedActive && superThunderstormActive) {
                 // Puddle generation
                 if (frameCount % 100 === 0) { // 每100幀嘗試生成一個水坑
                     const puddleWidth = Math.random() * 50 + 30; // 寬度 30-80
@@ -861,7 +929,7 @@
                 }
             }
 
-            if (thunderstormActive) {
+            if (!floodedActive && thunderstormActive) {
                 // 檢查雷雨持續時間是否結束
                 if (frameCount - thunderstormStartTime >= thunderstormDuration) {
                     thunderstormActive = false;
@@ -968,6 +1036,18 @@
             score++;
             frameCount++;
             if(frameCount%200===0){gameSpeed+=0.2;}
+
+            if (floodedActive) {
+                // Animate water level rising
+                if (waterLevel < canvas.height) {
+                    waterLevel += 2; // Adjust speed of rising water
+                    if (waterLevel > canvas.height) waterLevel = canvas.height;
+                }
+
+                // Draw the rising water
+                ctx.fillStyle = 'rgba(0, 0, 100, 0.3)'; // Semi-transparent dark blue
+                ctx.fillRect(0, canvas.height - waterLevel, canvas.width, waterLevel);
+            }
         }
 
         // --- 遊戲狀態 ---
@@ -992,6 +1072,11 @@
             // 重置超級雷雨系統變數
             superThunderstormActive = false;
             dinoWindForce = 0;
+            superThunderstormMessageActive = false; // Reset message state
+
+            // 重置淹水模式變數
+            floodedActive = false;
+            waterLevel = 0;
 
             // 重置新武器系統變數
             hasNewWeapon = false;
