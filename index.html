@@ -48,9 +48,10 @@
 
         // --- 遊戲變數 ---
         let dino, gravity = 0.6, gameSpeed = 5, score = 0;
-        let obstacles = [], fireballs = [], creatures = [], scorePopups = [], flyingEnemies = [], enemyBullets = [];
+        let obstacles = [], fireballs = [], creatures = [], scorePopups = [], flyingEnemies = [], enemyBullets = [], chargingEnemies = [];
         let ultimateFireball = null;
         let puddles = [];
+        let bubbles = []; // New: Array to store bubbles
         let floodedActive = false;
         let waterLevel = 0; // Current height of the rising water, starts from 0 (bottom)
         let gameOver = false, gameStarted = false, frameCount = 0;
@@ -124,6 +125,7 @@
 
         function setNextObstacleFrame() { nextObstacleFrame = frameCount + Math.floor(Math.random() * 50 + 60); }
         function setNextCreatureFrame() { nextCreatureFrame = frameCount + Math.floor(Math.random() * 150 + 120); }
+        function setNextChargingEnemySpawn() { nextChargingEnemySpawn = frameCount + Math.floor(Math.random() * 180 + 120); } // Spawn every 2-3 seconds
 
         // --- 類別定義 ---
         class ScorePopup{constructor(x,y,t){this.x=x;this.y=y;this.text=t;this.life=60;this.opacity=1;}update(){this.y-=0.5;this.life--;this.opacity=this.life/60;}draw(){ctx.save();ctx.globalAlpha=this.opacity;ctx.fillStyle='#28a745';ctx.font='16px Arial';ctx.fillText(this.text,this.x,this.y);ctx.restore();}}
@@ -218,6 +220,68 @@
         class Creature{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.dx=-gameSpeed*0.7;this.dy=0;this.isJumping=false;this.jumpPower=-12;this.groundY=canvas.height-10;}draw(){ctx.fillStyle='#8a2be2';ctx.fillRect(this.x,this.y,this.w,this.h);ctx.strokeStyle='black';ctx.lineWidth=1;ctx.strokeRect(this.x,this.y,this.w,this.h);}update(){this.x+=this.dx;if(this.isJumping){this.dy+=gravity;this.y+=this.dy;}if(this.y+this.h>this.groundY){this.y=this.groundY-this.h;this.dy=0;this.isJumping=false;}for(const o of obstacles){if(o.x-this.x<80&&o.x-this.x>0&&!this.isJumping){this.jump();break;}}this.draw();}jump(){if(!this.isJumping){this.isJumping=true;this.dy=this.jumpPower;}}}
         class EnemyBullet{constructor(x,y,vx,vy){this.x=x;this.y=y;this.w=4;this.h=10;this.vx=vx;this.vy=vy;this.rotation=0;this.rotationSpeed=0.1;}draw(){ctx.save();ctx.translate(this.x+this.w/2,this.y+this.h/2);ctx.rotate(this.rotation);ctx.fillStyle='#ffeb3b';ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h);ctx.strokeStyle='black';ctx.lineWidth=1;ctx.strokeRect(-this.w/2,-this.h/2,this.w,this.h);ctx.restore();}update(){this.x+=this.vx;this.y+=this.vy;this.rotation+=this.rotationSpeed;this.draw();}}
         class FlyingEnemy{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.dx=-gameSpeed*0.5;this.dy=1;this.targetY=Math.random()*60+20;this.isDescending=true;this.shootTimer=0;this.shootDelay=30;}draw(){ctx.fillStyle='#f1c40f';ctx.fillRect(this.x,this.y,this.w,this.h);ctx.strokeStyle='black';ctx.lineWidth=1;ctx.strokeRect(this.x,this.y,this.w,this.h);}update(){if(this.isDescending){this.y+=this.dy;if(this.y>=this.targetY){this.isDescending=false;}}this.x+=this.dx;if(!this.isDescending){this.shootTimer++;if(this.shootTimer>=this.shootDelay){this.shoot();this.shootTimer=0;}}this.draw();}shoot(){enemyBullets.push(new EnemyBullet(this.x+this.w/2,this.y+this.h,0,4));}}
+
+        class ChargingEnemy {
+            constructor(x, y, w, h) {
+                this.x = x;
+                this.y = y;
+                this.w = w;
+                this.h = h;
+                this.initialSpeed = gameSpeed * 1.5; // Speed to enter screen
+                this.chargeSpeed = 8; // Speed to charge at dino
+                this.state = 'entering'; // 'entering', 'pausing', 'charging'
+                this.pauseTimer = 90; // 1.5 seconds pause (90 frames)
+                this.targetX = 0; // Dino's x when charging starts
+                this.targetY = 0; // Dino's y when charging starts
+                this.vx = 0;
+                this.vy = 0;
+                this.rotation = 0; // New: Rotation property
+                this.rotationSpeed = 0.2; // New: Speed of rotation
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x + this.w / 2, this.y + this.h / 2);
+                ctx.rotate(this.rotation);
+                ctx.fillStyle = '#ff00ff'; // Magenta color for new enemy
+                ctx.fillRect(-this.w / 2, -this.h / 2, this.w, this.h);
+                ctx.strokeStyle = 'black';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(-this.w / 2, -this.h / 2, this.w, this.h);
+                ctx.restore();
+            }
+
+            update() {
+                switch (this.state) {
+                    case 'entering':
+                        this.x -= this.initialSpeed;
+                        if (this.x <= canvas.width - this.w - 50) { // Stop 50px from right edge
+                            this.state = 'pausing';
+                        }
+                        break;
+                    case 'pausing':
+                        this.pauseTimer--;
+                        if (this.pauseTimer <= 0) {
+                            this.state = 'charging';
+                            // Calculate direction to dino
+                            this.targetX = dino.x + dino.w / 2;
+                            this.targetY = dino.y + dino.h / 2;
+                            const dirX = this.targetX - (this.x + this.w / 2);
+                            const dirY = this.targetY - (this.y + this.h / 2);
+                            const magnitude = Math.sqrt(dirX * dirX + dirY * dirY);
+                            this.vx = (dirX / magnitude) * this.chargeSpeed;
+                            this.vy = (dirY / magnitude) * this.chargeSpeed;
+                        }
+                        break;
+                    case 'charging':
+                        this.x += this.vx;
+                        this.y += this.vy;
+                        this.rotation += this.rotationSpeed; // New: Rotate when charging
+                        break;
+                }
+                this.draw();
+            }
+        }
 
         class Boss {
             constructor(x, y, w, h) {
@@ -568,6 +632,35 @@
             }
         }
 
+        class Bubble {
+            constructor(x, y, radius, speedY, opacity) {
+                this.x = x;
+                this.y = y;
+                this.radius = radius;
+                this.speedY = speedY;
+                this.opacity = opacity;
+            }
+
+            update() {
+                this.y -= this.speedY;
+                this.opacity -= 0.005; // Gradually fade out
+                if (this.opacity < 0) this.opacity = 0;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.opacity;
+                ctx.fillStyle = 'rgba(0, 191, 255, 0.3)'; // Blue bubble, more transparent
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(0, 191, 255, 0.5)'; // Blue border, slightly less transparent
+                ctx.lineWidth = 1;
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+
         // --- 遊戲邏輯處理 ---
         function handleDamage(){
             
@@ -650,6 +743,13 @@
                             }
                         }
                     }
+                    if (!removeFireball) { // New: Check for charging enemies
+                        for(let l=chargingEnemies.length-1;l>=0;l--){
+                            if(fireball.x<chargingEnemies[l].x+chargingEnemies[l].w&&fireball.x+fireball.width>chargingEnemies[l].x&&fireball.y<chargingEnemies[l].y+chargingEnemies[l].h&&fireball.y+fireball.height>chargingEnemies[l].y){
+                                const ce=chargingEnemies[l];scorePopups.push(new ScorePopup(ce.x,ce.y,'+200'));chargingEnemies.splice(l,1);removeFireball=true;score+=200;break;
+                            }
+                        }
+                    }
                     // New: Check collision with boss for regular fireball
                     if (bossActive && boss && fireball.x < boss.x + boss.w && fireball.x + fireball.width > boss.x && fireball.y < boss.y + boss.h && fireball.y + fireball.height > boss.y) {
                         boss.takeDamage(1); // Regular fireball deals 1 damage
@@ -668,7 +768,7 @@
             if(!ultimateFireball)return;
             ultimateFireball.update();
             const uf=ultimateFireball;
-            [obstacles,creatures,flyingEnemies,enemyBullets].forEach(arr=>{
+            [obstacles,creatures,flyingEnemies,enemyBullets,chargingEnemies].forEach(arr=>{
                 for(let i=arr.length-1;i>=0;i--){
                     const item=arr[i];
                     // If boss is active, ultimate fireball does not affect boss
@@ -706,9 +806,39 @@
             }
             for(let i=flyingEnemies.length-1;i>=0;i--){flyingEnemies[i].update();if(dino.x<flyingEnemies[i].x+flyingEnemies[i].w&&dino.x+dino.w>flyingEnemies[i].x&&dino.y<flyingEnemies[i].y+flyingEnemies[i].h&&dino.y+dino.h>flyingEnemies[i].y){handleDamage();flyingEnemies.splice(i,1);}if(flyingEnemies[i]&&flyingEnemies[i].x+flyingEnemies[i].w<0){flyingEnemies.splice(i,1);}}}
         function handleEnemyBullets(){for(let i=enemyBullets.length-1;i>=0;i--){enemyBullets[i].update();if(dino.x<enemyBullets[i].x+enemyBullets[i].w&&dino.x+dino.w>enemyBullets[i].x&&dino.y<enemyBullets[i].y+enemyBullets[i].h&&dino.y+dino.h>enemyBullets[i].y){handleDamage();enemyBullets.splice(i,1);}if(enemyBullets[i]&&enemyBullets[i].y>canvas.height){enemyBullets.splice(i,1);}}}
+
+        function handleChargingEnemies(){
+            if (score >= 20000 && frameCount > nextChargingEnemySpawn) {
+                createChargingEnemy();
+                setNextChargingEnemySpawn();
+            }
+            for(let i=chargingEnemies.length-1;i>=0;i--){
+                const enemy = chargingEnemies[i];
+                enemy.update();
+
+                // Collision with dino
+                if(dino.x < enemy.x + enemy.w &&
+                   dino.x + dino.w > enemy.x &&
+                   dino.y < enemy.y + enemy.h &&
+                   dino.y + dino.h > enemy.y){
+                    handleDamage();
+                    chargingEnemies.splice(i,1);
+                }
+                // Remove if off-screen (only if charging, as entering enemies stop)
+                else if (enemy.state === 'charging' && (enemy.x + enemy.w < 0 || enemy.y + enemy.h < 0 || enemy.y > canvas.height)) {
+                    chargingEnemies.splice(i,1);
+                }
+            }
+        }
+
         function createObstacle(){const h=Math.random()*30+20;obstacles.push(new Obstacle(canvas.width,canvas.height-h-10,20,h));}
         function createCreature(){const s=30;creatures.push(new Creature(canvas.width,canvas.height-s-10,s,s));}
         function createFlyingEnemy(){const s=35;flyingEnemies.push(new FlyingEnemy(canvas.width,-s,s,20));}
+        function createChargingEnemy(){
+            const w = 40, h = 40;
+            const y = Math.random() * (canvas.height - h - 20) + 10; // Random height, avoid very top/bottom
+            chargingEnemies.push(new ChargingEnemy(canvas.width, y, w, h));
+        }
 
         // --- 繪圖與主迴圈 ---
         function drawChargeIndicator(){
@@ -866,6 +996,7 @@
             handleCreatures();
             handleFlyingEnemies();
             handleEnemyBullets(); // This handles all enemy bullets, including boss's and flying enemies'
+            handleChargingEnemies(); // New: Handle charging enemies
 
             if (bossActive) {
                 boss.update();
@@ -1041,6 +1172,25 @@
                 // Draw the rising water
                 ctx.fillStyle = 'rgba(0, 0, 100, 0.3)'; // Semi-transparent dark blue
                 ctx.fillRect(0, canvas.height - waterLevel, canvas.width, waterLevel);
+
+                // Bubble generation and update
+                if (frameCount % 10 === 0) { // Generate a new bubble every 10 frames
+                    const x = Math.random() * canvas.width;
+                    const y = canvas.height; // Start from the bottom
+                    const radius = Math.random() * 5 + 2; // Radius between 2 and 7
+                    const speedY = Math.random() * 0.5 + 0.5; // Speed between 0.5 and 1
+                    const opacity = 1;
+                    bubbles.push(new Bubble(x, y, radius, speedY, opacity));
+                }
+
+                for (let i = bubbles.length - 1; i >= 0; i--) {
+                    const bubble = bubbles[i];
+                    bubble.update();
+                    bubble.draw();
+                    if (bubble.y < 0 || bubble.opacity <= 0) { // Remove if off-screen or fully faded
+                        bubbles.splice(i, 1);
+                    }
+                }
             }
         }
 
@@ -1055,6 +1205,7 @@
             isCharging=false;chargeTime=0;
             isDay=true;timeInCycle=0;transitionTime=0;currentColors={...dayColors};
             nextFlyingEnemySpawn = 0;
+            nextChargingEnemySpawn = 0; // New: Reset charging enemy spawn timer
 
             // 重置雷雨系統變數
             thunderstormActive = false;
@@ -1071,6 +1222,8 @@
             // 重置淹水模式變數
             floodedActive = false;
             waterLevel = 0;
+            puddles = []; // Clear puddles on reset
+            bubbles = []; // Clear bubbles on reset
 
             // 重置新武器系統變數
             hasNewWeapon = false;
@@ -1088,6 +1241,7 @@
 
             setNextObstacleFrame();
             setNextCreatureFrame();
+            setNextChargingEnemySpawn(); // New: Initialize charging enemy spawn timer
             animate();
             
         }
