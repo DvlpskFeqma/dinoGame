@@ -231,7 +231,7 @@
                 this.isSummoning = false;
                 this.summonSequenceCounter = 0;
                 this.delayBetweenSummons = 15; // Frames between each creature spawn
-                console.log("Boss: Constructor - delayBetweenSummons:", this.delayBetweenSummons); // New log
+                
             }
 
             draw() {
@@ -270,18 +270,18 @@
                         this.summonTimer = 0;
                         this.isSummoning = true;
                         this.summonSequenceCounter = 0;
-                        console.log("Boss: Starting summon sequence."); // New log
+                        
                     }
                 } else { // In summoning sequence
                     this.summonSequenceCounter++;
-                    console.log("Boss: Summon sequence counter:", this.summonSequenceCounter, "Modulo result:", this.summonSequenceCounter % this.delayBetweenSummons, "Delay between summons:", this.delayBetweenSummons); // New log
+                    
                     if (this.summonSequenceCounter % this.delayBetweenSummons === 0) {
                         this.summonCreature();
-                        console.log("Boss: Summoned creature. Count:", this.summonSequenceCounter / this.delayBetweenSummons); // New log
+                        
                         if (this.summonSequenceCounter / this.delayBetweenSummons >= bossMaxSummon) {
                             this.isSummoning = false; // End sequence
                             this.summonSequenceCounter = 0;
-                            console.log("Boss: Ending summon sequence."); // New log
+                            
                         }
                     }
                 }
@@ -312,7 +312,7 @@
                 if (this.health <= 0) {
                     this.health = 0;
                     bossActive = false; // Boss defeated
-                    console.log("Boss: DEFEATED! bossActive set to false."); // New log
+                    
                     bossDefeatedCount++; // Increment defeated count
                     // Add score bonus for defeating boss
                     score += 5000;
@@ -418,8 +418,8 @@
             }
 
             draw() {
-                ctx.strokeStyle = 'rgba(173, 216, 230, 0.3)'; // Light blue, semi-transparent
-                ctx.lineWidth = this.width;
+                ctx.strokeStyle = 'rgba(173, 216, 230, 0.5)'; // Light blue, semi-transparent
+                ctx.lineWidth = 2; // Increased width
                 ctx.beginPath();
                 ctx.moveTo(this.x, this.y);
                 ctx.lineTo(this.x, this.y + this.length);
@@ -570,7 +570,7 @@
 
         // --- 遊戲邏輯處理 ---
         function handleDamage(){
-            console.log("Dino took damage! Current health:", dinoHealth);
+            
             if(isInvincible) return;
             dinoHealth--;
             isInvincible = true;
@@ -579,7 +579,7 @@
             setTimeout(() => canvasContainer.classList.remove('shake'), 500);
             if(dinoHealth <= 0){
                 gameOver = true;
-                console.log("Dino health reached 0. Game Over!");
+                
             }
         }
         function lerpColor(a,b,am){const ar=a>>16,ag=a>>8&0xff,ab=a&0xff,br=b>>16,bg=b>>8&0xff,bb=b&0xff,rr=ar+am*(br-ar),rg=ag+am*(bg-ag),rb=ab+am*(bb-ab);return(rr<<16|rg<<8|rb|0).toString(16).padStart(6,'0').replace(/^/,'#');}
@@ -810,9 +810,10 @@
         }
 
         function animate(){
-            console.log("animate loop running. gameOver:", gameOver, "dinoHealth:", dinoHealth, "frameCount:", frameCount);
+            console.log("Score:", score, "thunderstormActive:", thunderstormActive, "superThunderstormActive:", superThunderstormActive); // ADD THIS LINE
+            
             if(gameOver){
-                console.log("Game Over detected. Stopping animation.");
+                
                 showGameOver();
                 window.addEventListener('keydown',resetOnGameOver,{once:true});
                 return;
@@ -827,7 +828,7 @@
             }
             if(isCharging){
                 chargeTime++;
-                console.log("Charging: chargeTime =", chargeTime);
+                
             }
             ctx.clearRect(0,0,canvas.width,canvas.height);
 
@@ -929,13 +930,8 @@
                 }
             }
 
-            if (!floodedActive && thunderstormActive) {
-                // 檢查雷雨持續時間是否結束
-                if (frameCount - thunderstormStartTime >= thunderstormDuration) {
-                    thunderstormActive = false;
-                    currentColors = isDay ? { ...dayColors } : { ...nightColors }; // 恢復顏色
-                    rainParticles = []; // 清除雨滴粒子
-                } else {
+            if (thunderstormActive) {
+                console.log("Inside thunderstormActive block. Frame:", frameCount); // ADD THIS LOG
                     // 處理雷雨期間的閃電
                     lightningStrikeTimer++;
                     if (lightningStrikeTimer >= lightningStrikeInterval) {
@@ -945,7 +941,9 @@
                     }
 
                     // 生成雨滴粒子
+                    console.log("Checking frameCount for rain:", frameCount, "modulo 2:", frameCount % 2); // ADD THIS LOG
                     if (frameCount % 2 === 0) { // 每2幀生成一個新粒子
+                        console.log("Generating rain particle at frame:", frameCount); // ADD THIS LINE
                         const randomX = Math.random() * canvas.width;
                         let randomSpeedY = Math.random() * 5 + 2; // 速度介於2到7之間
                         let randomSpeedX = 0;
@@ -972,12 +970,6 @@
                             puddles.push(new Puddle(puddleX, puddleY, puddleWidth, puddleHeight));
                         }
                     }
-                }
-            } else {
-                // 確保雷雨不活躍時清除雨滴粒子
-                if (rainParticles.length > 0) {
-                    rainParticles = [];
-                }
             }
 
             // 更新和繪製閃電標記，移除已擊中的
@@ -1033,10 +1025,6 @@
             drawHealth();
             drawSuperThunderstormMessage();
             drawChargeIndicator();
-            score++;
-            frameCount++;
-            if(frameCount%200===0){gameSpeed+=0.2;}
-
             if (floodedActive) {
                 // Animate water level rising
                 if (waterLevel < canvas.height) {
@@ -1052,7 +1040,7 @@
 
         // --- 遊戲狀態 ---
         function resetGame(){
-            console.log("Resetting game...");
+            
             dino=new Dino(50,canvas.height-50,40,40);
             obstacles=[];fireballs=[];creatures=[];scorePopups=[];flyingEnemies=[];enemyBullets=[];ultimateFireball=null;
             score=0;gameSpeed=5;gameOver=false;gameStarted=true;frameCount=0;
@@ -1095,7 +1083,7 @@
             setNextObstacleFrame();
             setNextCreatureFrame();
             animate();
-            console.log("Game reset complete. Starting animation.");
+            
         }
 
         function showGameOver(){ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.fillStyle='white';ctx.font='40px Arial';ctx.textAlign='center';ctx.fillText('遊戲結束',canvas.width/2,canvas.height/2-20);ctx.font='20px Arial';ctx.fillText(`你的分數: ${score}`,canvas.width/2,canvas.height/2+20);ctx.fillText('按任意鍵重新開始',canvas.width/2,canvas.height/2+60);ctx.textAlign='left';}
@@ -1125,7 +1113,7 @@
                 if (!gameOver) {
                     score += 5000;
                     scorePopups.push(new ScorePopup(dino.x, dino.y, '+5000 (DEBUG)'));
-                    console.log("DEBUG: Added 5000 points. Current score:", score);
+                    
                 }
             }
         });
