@@ -100,8 +100,8 @@
 
         // --- 類別定義 ---
         class ScorePopup{constructor(x,y,t){this.x=x;this.y=y;this.text=t;this.life=60;this.opacity=1;}update(){this.y-=0.5;this.life--;this.opacity=this.life/60;}draw(){ctx.save();ctx.globalAlpha=this.opacity;ctx.fillStyle='#28a745';ctx.font='16px Arial';ctx.fillText(this.text,this.x,this.y);ctx.restore();}}
-        class Fireball{constructor(x,y){this.x=x;this.y=y;this.width=20;this.height=10;this.speed=10;}draw(){ctx.fillStyle='#ff4500';ctx.fillRect(this.x,this.y,this.width,this.height);}update(){this.x+=this.speed;this.draw();}}
-        class UltimateFireball{constructor(x,y){this.x=x;this.y=y;this.w=50;this.h=canvas.height;this.speed=gameSpeed*1.5;}draw(){const grad=ctx.createLinearGradient(this.x,this.y,this.x+this.w,this.y);grad.addColorStop(0,'rgba(255,100,0,0.8)');grad.addColorStop(0.5,'rgba(255,255,0,0.8)');grad.addColorStop(1,'rgba(255,100,0,0.8)');ctx.fillStyle=grad;ctx.fillRect(this.x,this.y,this.w,this.h);}update(){this.x+=this.speed;this.draw();}}
+        class Fireball{constructor(x,y){this.x=x;this.y=y;this.width=20;this.height=10;this.speed=10;}draw(){ctx.fillStyle='#ff4500';ctx.fillRect(this.x,this.y,this.width,this.height);ctx.strokeStyle='black';ctx.lineWidth=1;ctx.strokeRect(this.x,this.y,this.width,this.height);}update(){this.x+=this.speed;this.draw();}}
+        class UltimateFireball{constructor(x,y){this.x=x;this.y=y;this.w=50;this.h=canvas.height;this.speed=gameSpeed*1.5;}draw(){const grad=ctx.createLinearGradient(this.x,this.y,this.x+this.w,this.y);grad.addColorStop(0,'rgba(255,100,0,0.8)');grad.addColorStop(0.5,'rgba(255,255,0,0.8)');grad.addColorStop(1,'rgba(255,100,0,0.8)');ctx.fillStyle=grad;ctx.fillRect(this.x,this.y,this.w,this.h);ctx.strokeStyle='black';ctx.lineWidth=1;ctx.strokeRect(this.x,this.y,this.w,this.h);}update(){this.x+=this.speed;this.draw();}}
         class Dino{
             constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.dy=0;this.vx=0;this.moveSpeed=5;this.isJumping=false;this.jumpPower=-15;this.groundY=canvas.height-10;}
             draw(){if(isInvincible){if(invincibilityCounter%10<5){ctx.drawImage(dinoImage,this.x,this.y,this.w,this.h);}}else{ctx.drawImage(dinoImage,this.x,this.y,this.w,this.h);}}
@@ -157,10 +157,10 @@
                 }
             }
         }
-        class Obstacle{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;}draw(){ctx.fillStyle='#d9534f';ctx.fillRect(this.x,this.y,this.w,this.h);}update(){this.x-=gameSpeed;this.draw();}}
-        class Creature{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.dx=-gameSpeed*0.7;this.dy=0;this.isJumping=false;this.jumpPower=-12;this.groundY=canvas.height-10;}draw(){ctx.fillStyle='#8a2be2';ctx.fillRect(this.x,this.y,this.w,this.h);}update(){this.x+=this.dx;if(this.isJumping){this.dy+=gravity;this.y+=this.dy;}if(this.y+this.h>this.groundY){this.y=this.groundY-this.h;this.dy=0;this.isJumping=false;}for(const o of obstacles){if(o.x-this.x<80&&o.x-this.x>0&&!this.isJumping){this.jump();break;}}this.draw();}jump(){if(!this.isJumping){this.isJumping=true;this.dy=this.jumpPower;}}}
-        class EnemyBullet{constructor(x,y,vx,vy){this.x=x;this.y=y;this.w=4;this.h=10;this.vx=vx;this.vy=vy;}draw(){ctx.fillStyle='#ffeb3b';ctx.fillRect(this.x,this.y,this.w,this.h);}update(){this.x+=this.vx;this.y+=this.vy;this.draw();}}
-        class FlyingEnemy{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.dx=-gameSpeed*0.5;this.dy=1;this.targetY=Math.random()*60+20;this.isDescending=true;this.shootTimer=0;this.shootDelay=30;}draw(){ctx.fillStyle='#f1c40f';ctx.fillRect(this.x,this.y,this.w,this.h);}update(){if(this.isDescending){this.y+=this.dy;if(this.y>=this.targetY){this.isDescending=false;}}this.x+=this.dx;if(!this.isDescending){this.shootTimer++;if(this.shootTimer>=this.shootDelay){this.shoot();this.shootTimer=0;}}this.draw();}shoot(){enemyBullets.push(new EnemyBullet(this.x+this.w/2,this.y+this.h,0,4));}}
+        class Obstacle{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;}draw(){ctx.fillStyle='#d9534f';ctx.fillRect(this.x,this.y,this.w,this.h);ctx.strokeStyle='black';ctx.lineWidth=1;ctx.strokeRect(this.x,this.y,this.w,this.h);}update(){this.x-=gameSpeed;this.draw();}}
+        class Creature{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.dx=-gameSpeed*0.7;this.dy=0;this.isJumping=false;this.jumpPower=-12;this.groundY=canvas.height-10;}draw(){ctx.fillStyle='#8a2be2';ctx.fillRect(this.x,this.y,this.w,this.h);ctx.strokeStyle='black';ctx.lineWidth=1;ctx.strokeRect(this.x,this.y,this.w,this.h);}update(){this.x+=this.dx;if(this.isJumping){this.dy+=gravity;this.y+=this.dy;}if(this.y+this.h>this.groundY){this.y=this.groundY-this.h;this.dy=0;this.isJumping=false;}for(const o of obstacles){if(o.x-this.x<80&&o.x-this.x>0&&!this.isJumping){this.jump();break;}}this.draw();}jump(){if(!this.isJumping){this.isJumping=true;this.dy=this.jumpPower;}}}
+        class EnemyBullet{constructor(x,y,vx,vy){this.x=x;this.y=y;this.w=4;this.h=10;this.vx=vx;this.vy=vy;}draw(){ctx.fillStyle='#ffeb3b';ctx.fillRect(this.x,this.y,this.w,this.h);ctx.strokeStyle='black';ctx.lineWidth=1;ctx.strokeRect(this.x,this.y,this.w,this.h);}update(){this.x+=this.vx;this.y+=this.vy;this.draw();}}
+        class FlyingEnemy{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.dx=-gameSpeed*0.5;this.dy=1;this.targetY=Math.random()*60+20;this.isDescending=true;this.shootTimer=0;this.shootDelay=30;}draw(){ctx.fillStyle='#f1c40f';ctx.fillRect(this.x,this.y,this.w,this.h);ctx.strokeStyle='black';ctx.lineWidth=1;ctx.strokeRect(this.x,this.y,this.w,this.h);}update(){if(this.isDescending){this.y+=this.dy;if(this.y>=this.targetY){this.isDescending=false;}}this.x+=this.dx;if(!this.isDescending){this.shootTimer++;if(this.shootTimer>=this.shootDelay){this.shoot();this.shootTimer=0;}}this.draw();}shoot(){enemyBullets.push(new EnemyBullet(this.x+this.w/2,this.y+this.h,0,4));}}
 
         class Boss {
             constructor(x, y, w, h) {
@@ -174,11 +174,15 @@
                 this.isSummoning = false;
                 this.summonSequenceCounter = 0;
                 this.delayBetweenSummons = 15; // Frames between each creature spawn
+                console.log("Boss: Constructor - delayBetweenSummons:", this.delayBetweenSummons); // New log
             }
 
             draw() {
                 ctx.fillStyle = 'darkred'; // Large red rectangle for the boss
                 ctx.fillRect(this.x, this.y, this.w, this.h);
+                ctx.strokeStyle = 'black'; // Add border
+                ctx.lineWidth = 1;
+                ctx.strokeRect(this.x, this.y, this.w, this.h);
 
                 // Draw health bar
                 const barWidth = this.w * 0.8;
@@ -282,6 +286,9 @@
                     ctx.font = '30px Arial';
                     ctx.textAlign = 'center';
                     ctx.fillText('!', this.x + this.width / 2, this.y + this.height);
+                    ctx.strokeStyle = 'black'; // Add border to exclamation mark
+                    ctx.lineWidth = 1;
+                    ctx.strokeText('!', this.x + this.width / 2, this.y + this.height); // Stroke the text
                     ctx.textAlign = 'left'; // Reset
                 }
             }
@@ -352,6 +359,9 @@
             draw() {
                 ctx.fillStyle = 'purple'; // Purple square for now
                 ctx.fillRect(this.x, this.y, this.width, this.height);
+                ctx.strokeStyle = 'black'; // Add border
+                ctx.lineWidth = 1;
+                ctx.strokeRect(this.x, this.y, this.width, this.height);
                 ctx.fillStyle = 'white';
                 ctx.font = '18px Arial';
                 ctx.textAlign = 'center';
@@ -386,6 +396,9 @@
                     ctx.beginPath();
                     ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
                     ctx.fill();
+                    ctx.strokeStyle = 'black'; // Add border
+                    ctx.lineWidth = 1;
+                    ctx.stroke(); // Stroke the circle
                 } else {
                     // Draw explosion
                     ctx.fillStyle = `rgba(255, 165, 0, ${1 - (this.explosionFrame / this.explosionDuration)})`; // Orange, fading
