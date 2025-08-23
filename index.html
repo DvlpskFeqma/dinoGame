@@ -280,7 +280,7 @@
             }
         }
 
-        class FlyingEnemy{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.dx=-gameSpeed*0.5;this.dy=1;this.targetY=Math.random()*60+20;this.isDescending=true;this.shootTimer=0;this.shootDelay=30;}draw(){ctx.fillStyle='#f1c40f';ctx.fillRect(this.x,this.y,this.w,this.h);ctx.strokeStyle='black';ctx.lineWidth=1;ctx.strokeRect(this.x,this.y,this.w,this.h);}update(){if(this.isDescending){this.y+=this.dy;if(this.y>=this.targetY){this.isDescending=false;}}this.x+=this.dx;if(!this.isDescending){this.shootTimer++;if(this.shootTimer>=this.shootDelay){this.shoot();this.shootTimer=0;}}this.draw();}shoot(){enemyBullets.push(new EnemyBullet(this.x+this.w/2,this.y+this.h,0,4));}}
+        class FlyingEnemy{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.dx=-gameSpeed*0.5;this.dy=1;this.targetY=Math.random()*60+20;this.isDescending=true;this.shootTimer=0;this.shootDelay=60;}draw(){ctx.fillStyle='#f1c40f';ctx.fillRect(this.x,this.y,this.w,this.h);ctx.strokeStyle='black';ctx.lineWidth=1;ctx.strokeRect(this.x,this.y,this.w,this.h);}update(){if(this.isDescending){this.y+=this.dy;if(this.y>=this.targetY){this.isDescending=false;}}this.x+=this.dx;if(!this.isDescending){this.shootTimer++;if(this.shootTimer>=this.shootDelay){this.shoot();this.shootTimer=0;}}this.draw();}shoot(){enemyBullets.push(new EnemyBullet(this.x+this.w/2,this.y+this.h,0,4));}}
 
         class ChargingEnemy {
             constructor(x, y, w, h) {
