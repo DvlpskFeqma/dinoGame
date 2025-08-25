@@ -51,6 +51,7 @@
         let slopeAngle = 0; // Current slope angle in degrees
         let targetSlopeAngle = 0; // Target slope angle in degrees
         const slopeTransitionSpeed = 0.05; // Speed at which slope changes (degrees per frame)
+        let slopeChangeComplete = false; // Flag to indicate if slope change is complete
         let obstacles = [], fireballs = [], creatures = [], scorePopups = [], flyingEnemies = [], enemyBullets = [], chargingEnemies = [];
         let ultimateFireball = null;
         let puddles = [];
@@ -149,10 +150,6 @@
             constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.dy=0;this.vx=0;this.moveSpeed=5;this.isJumping=false;this.jumpPower=-15;this.groundY=canvas.height-10;this.onPuddle=false;}
             draw(){if(isInvincible){if(invincibilityCounter%10<5){ctx.drawImage(dinoImage,this.x,this.y,this.w,this.h);}}else{ctx.drawImage(dinoImage,this.x,this.y,this.w,this.h);}}
             update(){
-                // Calculate dynamic ground Y based on slope
-                const baseGroundY = canvas.height - 10; // Base ground level at x=0
-                const currentGroundY = baseGroundY - (this.x * Math.tan(slopeAngle * Math.PI / 180));
-
                 // Check for puddle collision and apply sliding effect
                 this.onPuddle = false; // Reset
                 for (const puddle of puddles) {
@@ -184,14 +181,30 @@
                 if (superThunderstormActive && !floodedActive) {
                     this.x += dinoWindForce; // Apply constant leftward force
                 }
-                this.x += this.vx;
-                if(this.isJumping){this.dy+=gravity;this.y+=this.dy;}
-                // Adjust dino's Y position to stay on the sloped ground
-                if(this.y+this.h > currentGroundY){
-                    this.y = currentGroundY - this.h;
-                    this.dy = 0;
-                    this.isJumping = false;
+                this.x += this.vx; // Apply horizontal movement first
+
+                // Calculate dynamic ground Y based on slope using the NEW x position
+                const baseGroundY = canvas.height - 10; // Base ground level at x=0
+                const currentGroundY = baseGroundY - (this.x * Math.tan(slopeAngle * Math.PI / 180));
+
+                if(this.isJumping){
+                    this.dy+=gravity;
+                    this.y+=this.dy;
                 }
+
+                // If not jumping, ensure dino is on the ground
+                if (!this.isJumping) {
+                    this.y = currentGroundY - this.h;
+                    this.dy = 0; // Ensure no residual vertical velocity
+                } else {
+                    // If jumping, still ensure it doesn't go below the ground
+                    if (this.y + this.h > currentGroundY) {
+                        this.y = currentGroundY - this.h;
+                        this.dy = 0;
+                        this.isJumping = false;
+                    }
+                }
+
                 // Ensure dino doesn't go below the lowest possible ground level (canvas.height - 10)
                 if (this.y + this.h > canvas.height - 10) {
                     this.y = canvas.height - 10 - this.h;
@@ -244,7 +257,15 @@
                 }
             }
         }
-        class Obstacle{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;}draw(){ctx.fillStyle='#d9534f';ctx.fillRect(this.x,this.y,this.w,this.h);ctx.strokeStyle='black';ctx.lineWidth=1;ctx.strokeRect(this.x,this.y,this.w,this.h);}update(){this.x-=gameSpeed;this.draw();}}
+        class Obstacle{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;}draw(){ctx.fillStyle='#d9534f';ctx.fillRect(this.x,this.y,this.w,this.h);ctx.strokeStyle='black';ctx.lineWidth=1;ctx.strokeRect(this.x,this.y,this.w,this.h);}update(){
+            this.x-=gameSpeed;
+            if (slopeChangeComplete) {
+                const baseGroundY = canvas.height - 10;
+                const currentGroundY = baseGroundY - (this.x * Math.tan(slopeAngle * Math.PI / 180));
+                this.y = currentGroundY - this.h;
+            }
+            this.draw();
+        }}
         class Creature{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.dx=-gameSpeed*0.7;this.dy=0;this.isJumping=false;this.jumpPower=-12;this.groundY=canvas.height-10;}draw(){ctx.fillStyle='#8a2be2';ctx.fillRect(this.x,this.y,this.w,this.h);ctx.strokeStyle='black';ctx.lineWidth=1;ctx.strokeRect(this.x,this.y,this.w,this.h);}update(){this.x+=this.dx;if(this.isJumping){this.dy+=gravity;this.y+=this.dy;}if(this.y+this.h>this.groundY){this.y=this.groundY-this.h;this.dy=0;this.isJumping=false;}for(const o of obstacles){if(o.x-this.x<80&&o.x-this.x>0&&!this.isJumping){this.jump();break;}}this.draw();}jump(){if(!this.isJumping){this.isJumping=true;this.dy=this.jumpPower;}}}
         class EnemyBullet{constructor(x,y,vx,vy){this.x=x;this.y=y;this.w=4;this.h=10;this.vx=vx;this.vy=vy;this.rotation=0;this.rotationSpeed=0.1;}draw(){ctx.save();ctx.translate(this.x+this.w/2,this.y+this.h/2);ctx.rotate(this.rotation);ctx.fillStyle='#ffeb3b';ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h);ctx.strokeStyle='black';ctx.lineWidth=1;ctx.strokeRect(-this.w/2,-this.h/2,this.w,this.h);ctx.restore();}update(){this.x+=this.vx;this.y+=this.vy;this.rotation+=this.rotationSpeed;this.draw();}}
 
@@ -947,7 +968,7 @@
         function handleScorePopups(){for(let i=scorePopups.length-1;i>=0;i--){scorePopups[i].update();scorePopups[i].draw();if(scorePopups[i].life<=0){scorePopups.splice(i,1);}}}
         function handleFireballRegen(){if(currentFireballs<maxFireballs){fireballRegenCounter++;if(fireballRegenCounter>=fireballRegenRate){currentFireballs++;fireballRegenCounter=0;}}}
         function handleObstacles(){
-            if (!bossActive && frameCount > nextObstacleFrame){ // Only spawn if no boss
+            if (!bossActive && frameCount > nextObstacleFrame && slopeChangeComplete){ // Only spawn if no boss and slope change is complete
                 createObstacle();
                 setNextObstacleFrame();
             }
@@ -990,7 +1011,18 @@
             }
         }
 
-        function createObstacle(){const h=Math.random()*30+20;obstacles.push(new Obstacle(canvas.width,canvas.height-h-10,20,h));}
+        function createObstacle(){
+            const h=Math.random()*30+20;
+            let obstacleY = canvas.height - h - 10; // Default flat ground spawn
+
+            if (slopeChangeComplete) {
+                // Calculate ground Y at canvas.width for sloped ground
+                const baseGroundY = canvas.height - 10;
+                const groundYAtSpawnX = baseGroundY - (canvas.width * Math.tan(slopeAngle * Math.PI / 180));
+                obstacleY = groundYAtSpawnX - h;
+            }
+            obstacles.push(new Obstacle(canvas.width, obstacleY, 20, h));
+        }
         function createCreature(){const s=30;creatures.push(new Creature(canvas.width,canvas.height-s-10,s,s));}
         function createFlyingEnemy(){const s=35;flyingEnemies.push(new FlyingEnemy(canvas.width,-s,s,20));}
         function createChargingEnemy(){
@@ -1206,7 +1238,7 @@
 
                 // New: Slope change logic
                 if (isBoss2Defeated && score >= 40000) {
-                    targetSlopeAngle = 15; // Set target to 75 degrees
+                    targetSlopeAngle = 15; // Set target to 15 degrees
                 }
 
                 // Gradually change slopeAngle
@@ -1214,6 +1246,11 @@
                     slopeAngle = Math.min(targetSlopeAngle, slopeAngle + slopeTransitionSpeed);
                 } else if (slopeAngle > targetSlopeAngle) {
                     slopeAngle = Math.max(targetSlopeAngle, slopeAngle - slopeTransitionSpeed);
+                }
+                if (slopeAngle >= targetSlopeAngle && targetSlopeAngle > 0) { // Check if slope has reached target and target is not 0
+                    slopeChangeComplete = true;
+                } else {
+                    slopeChangeComplete = false; // Reset if slope is changing or target is 0
                 }
 
                 // 雷雨系統
@@ -1489,6 +1526,7 @@
             // Reset slope variables
             slopeAngle = 0;
             targetSlopeAngle = 0;
+            slopeChangeComplete = false;
 
             setNextObstacleFrame();
             setNextCreatureFrame();
