@@ -58,6 +58,11 @@
         let bubbles = []; // New: Array to store bubbles
         let floodedActive = false;
         let waterLevel = 0; // Current height of the rising water, starts from 0 (bottom)
+        let cheatCodeInput = ""; // New: Stores typed characters for cheat code
+        let cheatCodeActive = false; // New: Flag for cheat code activation
+        let waterRecedingActive = false; // New: Flag for water receding animation
+        const recedeDuration = 10 * 60; // New: 10 seconds for water to recede and slope to flatten
+        let waterRecededOnce = false; // New: Flag to ensure receding plays only once
         let gameOver = false, gameStarted = false, frameCount = 0;
         let nextObstacleFrame, nextCreatureFrame, nextFlyingEnemySpawn = 0;
         const keyState = {};
@@ -859,7 +864,19 @@
             document.querySelector('p').style.color = currentColors.fg;
             canvas.style.borderColor = currentColors.ground;
         }
-        function handleInvincibility(){if(isInvincible){invincibilityCounter++;if(invincibilityCounter>=invincibilityDuration){isInvincible=false;invincibilityCounter=0;}}}
+        function handleInvincibility(){
+        if(cheatCodeActive) { // If cheat code is active, always be invincible
+            isInvincible = true;
+            return; // Skip normal invincibility logic
+        }
+        if(isInvincible){
+            invincibilityCounter++;
+            if(invincibilityCounter>=invincibilityDuration){
+                isInvincible=false;
+                invincibilityCounter=0;
+            }
+        }
+    }
                 function handleFireballs(){
             for(let i=fireballs.length-1;i>=0;i--){
                 const fireball = fireballs[i];
@@ -1149,8 +1166,7 @@
             if (elapsed > fpsInterval) {
                 then = now - (elapsed % fpsInterval);
 
-                console.log("Score:", score, "thunderstormActive:", thunderstormActive, "superThunderstormActive:", superThunderstormActive);
-                console.log("FloodedActive (start of frame):", floodedActive);
+                
                 
                 if(gameOver){
                     
@@ -1300,13 +1316,21 @@
                     superThunderstormMessageActive = true;
                     superThunderstormMessageTimer = superThunderstormMessageDuration;
                 }
-                console.log("After 20000 block: thunderstormActive =", thunderstormActive, "superThunderstormActive =", superThunderstormActive, "floodedActive =", floodedActive);
+                // New: Water receding trigger at 50000 score
+                if (score >= 50000 && !waterRecedingActive && !waterRecededOnce) {
+                    console.log("Water receding trigger met!");
+                    console.log("Score:", score, "waterRecedingActive:", waterRecedingActive, "waterRecededOnce:", waterRecededOnce);
+                    waterRecedingActive = true;
+                    waterLevel = canvas.height; // Start water from full height to recede
+                    waterRecededOnce = true; // Set flag to true so it only plays once
+                }
+                
 
                 // Continuous effects of Super Thunderstorm (runs every frame if superThunderstormActive)
                 if (!floodedActive && superThunderstormActive) {
                     // Puddle generation
                     if (frameCount % 100 === 0) { // 每100幀嘗試生成一個水坑
-                        console.log("Puddle generated (first block) at frame:", frameCount); // ADD THIS LOG
+                        
                         const puddleWidth = Math.random() * 50 + 30; // 寬度 30-80
                         const puddleHeight = 5; // 固定高度
                         const puddleX = canvas.width;
@@ -1316,7 +1340,7 @@
                 }
 
                 if (thunderstormActive) {
-                    console.log("Inside thunderstormActive block. Frame:", frameCount); // ADD THIS LOG
+                    
                         // 處理雷雨期間的閃電
                         lightningStrikeTimer++;
                         if (lightningStrikeTimer >= lightningStrikeInterval) {
@@ -1326,9 +1350,9 @@
                         }
 
                         // 生成雨滴粒子
-                        console.log("Checking frameCount for rain:", frameCount, "modulo 2:", frameCount % 2); // ADD THIS LOG
+                        
                         if (frameCount % 2 === 0) { // 每2幀生成一個新粒子
-                            console.log("Generating rain particle at frame:", frameCount); // ADD THIS LINE
+                            
                             const randomX = Math.random() * canvas.width;
                             let randomSpeedY = Math.random() * 5 + 2; // 速度介於2到7之間
                             let randomSpeedX = 0;
@@ -1348,7 +1372,7 @@
                         if (superThunderstormActive) { // Only generate puddles during super thunderstorm
                             // 隨機生成水坑
                             if (frameCount % 100 === 0) { // 每100幀嘗試生成一個水坑
-                                console.log("Puddle generated (second block) at frame:", frameCount); // ADD THIS LOG
+                                
                                 const puddleWidth = Math.random() * 50 + 30; // 寬度 30-80
                                 const puddleHeight = 5; // 固定高度
                                 const puddleX = canvas.width;
@@ -1468,6 +1492,32 @@
                             bubbles.splice(i, 1);
                         }
                     }
+                } else if (waterRecedingActive) {
+                    console.log("Water receding active. waterLevel:", waterLevel);
+                    // Water receding logic
+                    if (waterLevel > 0) {
+                        waterLevel -= (canvas.height / recedeDuration); // Recede over recedeDuration
+                        if (waterLevel < 0) waterLevel = 0;
+                    } else {
+                        waterRecedingActive = false; // Water has fully receded
+                        console.log("Water fully receded.");
+                    }
+
+                    // Draw the receding water
+                    if (waterLevel > 0) {
+                        ctx.fillStyle = 'rgba(0, 0, 100, 0.3)'; // Semi-transparent dark blue
+                        ctx.fillRect(0, canvas.height - waterLevel, canvas.width, waterLevel);
+                    }
+
+                    // Bubbles should not be generated during receding, and existing ones should fade/move
+                    for (let i = bubbles.length - 1; i >= 0; i--) {
+                        const bubble = bubbles[i];
+                        bubble.update();
+                        bubble.draw();
+                        if (bubble.y < 0 || bubble.opacity <= 0) { // Remove if off-screen or fully faded
+                            bubbles.splice(i, 1);
+                        }
+                    }
                 }
             }
         }
@@ -1502,6 +1552,8 @@
             waterLevel = 0;
             puddles = []; // Clear puddles on reset
             bubbles = []; // Clear bubbles on reset
+            waterRecedingActive = false; // Reset water receding flag
+            waterRecededOnce = false; // Reset water receded once flag
 
             // 重置新武器系統變數
             hasNewWeapon = false;
@@ -1543,6 +1595,27 @@
         
         // --- 事件監聽 ---
         window.addEventListener('keydown', (e) => {
+            // Cheat code logic
+            const char = e.key; // Get the character of the pressed key
+            cheatCodeInput += char; // Append to input string
+
+            // Keep input string to a reasonable length (e.g., max length of cheat code + a few chars)
+            const maxLength = Math.max("5455485".length, "我的小恐龍無敵嗎".length) + 5;
+            if (cheatCodeInput.length > maxLength) {
+                cheatCodeInput = cheatCodeInput.substring(cheatCodeInput.length - maxLength);
+            }
+
+            // Check for cheat codes
+            if (cheatCodeInput.includes("5455485") || cheatCodeInput.includes("我的小恐龍無敵嗎")) {
+                if (!cheatCodeActive) { // Activate only once
+                    isInvincible = true;
+                    cheatCodeActive = true;
+                    scorePopups.push(new ScorePopup(dino.x, dino.y, '無敵模式啟動！'));
+                    console.log("Cheat code activated: Invincible mode!");
+                }
+                cheatCodeInput = ""; // Clear input after activation
+            }
+
             const k = e.code;
             keyState[k] = true;
             if (k === 'Space' || k === 'ArrowUp') {
