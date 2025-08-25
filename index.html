@@ -1463,7 +1463,27 @@
                 drawHealth();
                 drawSuperThunderstormMessage();
                 drawChargeIndicator();
-                if (floodedActive) {
+                if (waterRecedingActive) { // Prioritize water receding
+                    console.log("Water receding active. waterLevel:", waterLevel);
+                    // Water receding logic
+                    if (waterLevel > 0) {
+                        waterLevel -= (canvas.height / recedeDuration); // Recede over recedeDuration
+                        if (waterLevel < 0) waterLevel = 0;
+                    } else {
+                        waterRecedingActive = false; // Water has fully receded
+                        console.log("Water fully receded.");
+                    }
+
+                    // Bubbles should not be generated during receding, and existing ones should fade/move
+                    for (let i = bubbles.length - 1; i >= 0; i--) {
+                        const bubble = bubbles[i];
+                        bubble.update();
+                        bubble.draw();
+                        if (bubble.y < 0 || bubble.opacity <= 0) { // Remove if off-screen or fully faded
+                            bubbles.splice(i, 1);
+                        }
+                    }
+                } else if (floodedActive) { // Only handle flooding if not receding
                     // Animate water level rising
                     if (waterLevel < canvas.height) {
                         waterLevel += 2; // Adjust speed of rising water
